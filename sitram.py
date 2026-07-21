@@ -1,6 +1,15 @@
+import os
 import re
+import subprocess
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import config
+
+# Garante que os navegadores do Playwright estejam instalados na nuvem (Streamlit Cloud)
+try:
+    subprocess.run(["playwright", "install", "chromium"], check=True)
+except Exception as e:
+    print(f"Aviso de instalação do Playwright: {e}")
+
 
 def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
     """Navega pelo menu do SITRAM e pesquisa as chaves informadas."""
