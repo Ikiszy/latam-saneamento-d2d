@@ -180,32 +180,22 @@ with col_esquerda:
 
     modo = st.radio(
         "Como você deseja importar as chaves?",
-        ["Digitar / Colar Dados", "Carregar Arquivo (TXT / Excel)"],
+        ["Digitar / Colar Chaves", "Carregar Arquivo (TXT / Excel)"],
         horizontal=True,
     )
 
-    dados_para_consulta = []  # Estrutura: [{'awb': '...', 'chave': '...'}, ...]
+    chaves_lista = []
 
-    if modo == "Digitar / Colar Dados":
+    if modo == "Digitar / Colar Chaves":
         texto_chaves = st.text_area(
-            "Cole abaixo (apenas Chaves OU formato 'AWB  Chave', um por linha):",
+            "Cole abaixo as chaves de acesso (uma por linha):",
             height=250,
-            placeholder="32405235  3525041733098000127550030000000001\n32475605  3525041733098000127550030000000002",
+            placeholder="3525041733098000127550030000000001\n3525041733098000127550030000000002",
         )
         if texto_chaves:
-            for linha in texto_chaves.split("\n"):
-                linha_limpa = linha.strip()
-                if not linha_limpa:
-                    continue
-                
-                # Se a linha contiver separadores como tabulação, hífen ou múltiplos espaços
-                partes = [p.strip() for p in linha_limpa.replace("\t", " ").replace("|", " ").split() if p.strip()]
-                
-                if len(partes) >= 2:
-                    dados_para_consulta.append({"awb": partes[0], "chave": partes[1]})
-                elif len(partes) == 1:
-                    dados_para_consulta.append({"awb": "N/A", "chave": partes[0]})
-
+            chaves_lista = [
+                c.strip() for c in texto_chaves.split("\n") if c.strip()
+            ]
     else:
         arquivo = st.file_uploader(
             "Selecione um arquivo de texto (.txt) ou planilha (.xlsx):",
@@ -213,42 +203,25 @@ with col_esquerda:
         )
         if arquivo:
             if arquivo.name.endswith(".txt"):
-                linhas = [l.decode("utf-8").strip() for l in arquivo.readlines() if l.decode("utf-8").strip()]
-                for l in linhas:
-                    partes = [p.strip() for p in l.replace("\t", " ").replace("|", " ").split() if p.strip()]
-                    if len(partes) >= 2:
-                        dados_para_consulta.append({"awb": partes[0], "chave": partes[1]})
-                    elif len(partes) == 1:
-                        dados_para_consulta.append({"awb": "N/A", "chave": partes[0]})
+                chaves_lista = [
+                    linha.decode("utf-8").strip()
+                    for linha in arquivo.readlines()
+                    if linha.decode("utf-8").strip()
+                ]
             else:
                 df_upload = pd.read_excel(arquivo)
-                if df_upload.shape[1] >= 2:
-                    # Assume Coluna 1 = AWB, Coluna 2 = Chave
-                    for _, row in df_upload.iterrows():
-                        dados_para_consulta.append({
-                            "awb": str(row.iloc[0]).strip(),
-                            "chave": str(row.iloc[1]).strip()
-                        })
-                else:
-                    # Apenas 1 coluna -> considera como Chave
-                    for _, row in df_upload.iterrows():
-                        dados_para_consulta.append({
-                            "awb": "N/A",
-                            "chave": str(row.iloc[0]).strip()
-                        })
+                chaves_lista = df_upload.iloc[:, 0].astype(str).tolist()
 
-    st.write(f"**Total de registros identificados:** `{len(dados_para_consulta)}`")
+    st.write(f"**Total de chaves identificadas:** `{len(chaves_lista)}`")
     btn_iniciar = st.button("INICIAR CONSULTA SITRAM")
 
 with col_direita:
     st.subheader("2. Painel de Acompanhamento")
 
     if btn_iniciar:
-        if not dados_para_consulta:
+        if not chaves_lista:
             st.warning("Insira ao menos uma chave de acesso para iniciar.")
         else:
-            chaves_somente = [item["chave"] for item in dados_para_consulta]
-            
             bar_progresso = st.progress(0)
             status_texto = st.empty()
             tabela_placeholder = st.empty()
@@ -261,33 +234,34 @@ with col_direita:
                 status_texto.text(
                     f"Processando: {atual} de {total} | Chave: {item['acao_fiscal']}"
                 )
-                
-                # Associa a AWB do item atual se disponível
-                awb_correspondente = dados_para_consulta[atual - 1]["awb"] if atual <= len(dados_para_consulta) else "N/A"
-                
-                item_com_awb = {
-                    "AWB / Minuta": awb_correspondente,
-                    "Chave / Ação Fiscal": item["acao_fiscal"],
-                    "Nota Fiscal": item["nota"],
-                    "Situação Imposto": item["imposto"],
-                    "Status Final": item["situacao"]
-                }
-                
-                resultados_em_tempo_real.append(item_com_awb)
+                resultados_em_tempo_real.append(item)
 
                 df_temp = pd.DataFrame(resultados_em_tempo_real)
+                df_temp.columns = [
+                    "Chave / Ação Fiscal",
+                    "Nota Fiscal",
+                    "Situação Imposto",
+                    "Status Final",
+                ]
                 tabela_placeholder.dataframe(df_temp, use_container_width=True)
 
             with st.spinner("Consultando dados na SEFAZ..."):
-                consultar_chaves_sitram(
-                    chaves_somente, callback_progresso=atualizar_interface
+                resultados = consultar_chaves_sitram(
+                    chaves_lista, callback_progresso=atualizar_interface
                 )
 
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
 
-            # Gera CSV com a coluna AWB
-            df_final = pd.DataFrame(resultados_em_tempo_real)
+            # Converte os resultados em CSV para abrir fácil no Google Sheets
+            df_final = pd.DataFrame(resultados)
+            df_final.columns = [
+                "Chave / Ação Fiscal",
+                "Nota Fiscal",
+                "Situação Imposto",
+                "Status Final",
+            ]
+            
             csv_data = df_final.to_csv(index=False, sep=";", encoding="utf-8-sig")
 
             st.download_button(
@@ -320,8 +294,9 @@ with col_direita:
             <div class="latam-card">
                 <div class="latam-card-title">💡 Dicas de Processamento D2D</div>
                 <ul style="color: #CBD5E1; font-size: 14px; margin-bottom: 0; padding-left: 20px;">
-                    <li>Você pode colar <b>AWB + Chave</b> juntas (copiando 2 colunas da sua planilha).</li>
-                    <li>O relatório final sai com a AWB já vinculada a cada resultado!</li>
+                    <li>Você pode colar até centenas de chaves de uma só vez.</li>
+                    <li>Arquivos <b>.TXT</b> devem conter 1 chave por linha.</li>
+                    <li>Planilhas <b>.XLSX</b> devem ter as chaves na primeira coluna.</li>
                     <li>Ao finalizar, o arquivo <b>.CSV</b> gerado pode ser aberto direto no Google Sheets.</li>
                 </ul>
             </div>
