@@ -3,7 +3,6 @@ import os
 import pandas as pd
 import requests
 import streamlit as st
-from excel import salvar_resultados_excel
 from sitram import consultar_chaves_sitram
 
 # 1. Configuração da página
@@ -254,15 +253,23 @@ with col_direita:
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
 
-            caminho_excel = salvar_resultados_excel(resultados)
+            # Converte os resultados em CSV para abrir fácil no Google Sheets
+            df_final = pd.DataFrame(resultados)
+            df_final.columns = [
+                "Chave / Ação Fiscal",
+                "Nota Fiscal",
+                "Situação Imposto",
+                "Status Final",
+            ]
+            
+            csv_data = df_final.to_csv(index=False, sep=";", encoding="utf-8-sig")
 
-            with open(caminho_excel, "rb") as file:
-                st.download_button(
-                    label="📥 Baixar Relatório Executivo (.xlsx)",
-                    data=file,
-                    file_name="Relatorio_Saneamento_LATAM.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+            st.download_button(
+                label="📥 Baixar Planilha para Google Sheets (.csv)",
+                data=csv_data,
+                file_name="Relatorio_Saneamento_LATAM.csv",
+                mime="text/csv",
+            )
     else:
         st.info(
             "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
@@ -290,7 +297,7 @@ with col_direita:
                     <li>Você pode colar até centenas de chaves de uma só vez.</li>
                     <li>Arquivos <b>.TXT</b> devem conter 1 chave por linha.</li>
                     <li>Planilhas <b>.XLSX</b> devem ter as chaves na primeira coluna.</li>
-                    <li>Ao finalizar, o relatório é gerado automaticamente em Excel.</li>
+                    <li>Ao finalizar, o arquivo <b>.CSV</b> gerado pode ser aberto direto no Google Sheets.</li>
                 </ul>
             </div>
             """,
