@@ -303,7 +303,7 @@ st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
 st.write("Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!")
 
 FORMSPREE_ID = "mrenybwd"  # <--- COLOQUE O SEU ID DO FORMSPREE AQUI
-FORMSPREE_URL = f"https://formspree.io/f/{mrenybwd}"
+FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
 
 with st.form(key="form_feedback_formspree", clear_on_submit=True):
     nome_usuario = st.text_input("Seu nome (opcional):", placeholder="Ex: João Silva")
