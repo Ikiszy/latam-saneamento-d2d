@@ -88,14 +88,14 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
                     linhas = [l.strip() for l in status_texto.split("\n") if l.strip()]
                     resultado_item["imposto"] = " / ".join(linhas) if linhas else "Não Informado"
 
-                # REGRA RIGOROSA DE STATUS:
-                # Só marca LIBERADA se tiver a palavra PAGO e NÃO tiver nenhuma indicação de pendência.
+                # REGRA DE STATUS AJUSTADA
                 texto_completo = status_texto.upper()
-                termos_pendentes = ["A PAGAR", "PENDENTE", "GERADO", "DEBITO", "PARCELA", "A RECOLHER", "SUBT"]
-                
-                tem_pendencia = any(termo in texto_completo for termo in termos_pendentes)
 
-                if "PAGO" in texto_completo and not tem_pendencia:
+                # Verifica se há cobrança pendente explícita
+                tem_cobranca_ativa = any(termo in texto_completo for termo in ["A PAGAR", "A RECOLHER", "PENDENTE"])
+
+                # Se consta PAGO ou PAGA e não há cobrança ativa -> LIBERADA
+                if ("PAGO" in texto_completo or "PAGA" in texto_completo) and not tem_cobranca_ativa:
                     resultado_item["situacao"] = "LIBERADA"
                 else:
                     resultado_item["situacao"] = "PENDENTE"
@@ -112,11 +112,8 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
             if callback_progresso:
                 callback_progresso(atual=indice, total=total_chaves, item=resultado_item)
 
-            # Pausa de 0.3 segundos para estabilidade do servidor em grandes lotes
             time.sleep(0.3)
 
         browser.close()
-
-    return resultados
 
     return resultados
