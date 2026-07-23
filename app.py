@@ -277,7 +277,7 @@ with col_direita:
                     "Levar os sonhos ao seu destino com segurança, eficiência e agilidade — otimizando processos fiscais para impulsionar a operação LATAM Cargo."
                 </div>
             </div>
-        """,
+            """,
             unsafe_allow_html=True,
         )
 
@@ -293,7 +293,7 @@ with col_direita:
                     <li>Ao finalizar, o relatório é gerado automaticamente em Excel.</li>
                 </ul>
             </div>
-        """,
+            """,
             unsafe_allow_html=True,
         )
 
@@ -302,7 +302,7 @@ st.markdown("<br><hr>", unsafe_allow_html=True)
 st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
 st.write("Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!")
 
-FORMSPREE_ID = "mrenybwd"  # <--- COLE O SEU ID DO FORMSPREE AQUI
+FORMSPREE_ID = "mrenybwd"  # <--- COLOQUE O SEU ID DO FORMSPREE AQUI
 FORMSPREE_URL = f"https://formspree.io/f/{mrenybwd}"
 
 with st.form(key="form_feedback_formspree", clear_on_submit=True):
@@ -330,6 +330,3 @@ if btn_enviar_feedback:
                 st.error("Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
         except Exception as e:
             st.error(f"Erro ao conectar com o servidor: {e}")
-        """,
-            unsafe_allow_html=True,
-        )
