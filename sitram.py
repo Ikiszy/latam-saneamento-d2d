@@ -1,10 +1,11 @@
 import os
 import re
+import time
 import subprocess
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import config
 
-# Garante que os navegadores do Playwright estejam instalados na nuvem (Streamlit Cloud)
+# Garante que os navegadores do Playwright estejam instalados na nuvem
 try:
     subprocess.run(["playwright", "install", "chromium"], check=True)
 except Exception as e:
@@ -12,7 +13,7 @@ except Exception as e:
 
 
 def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
-    """Navega pelo menu do SITRAM e pesquisa as chaves informadas."""
+    """Navega pelo menu do SITRAM e pesquisa as chaves informadas de forma otimizada."""
     resultados = []
 
     with sync_playwright() as p:
@@ -22,13 +23,13 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
         try:
             # 1. Acessa a página principal do SITRAM
             page.goto("https://portal-sitram.sefaz.ce.gov.br/sitram-internet/#/", timeout=config.TIMEOUT)
-            page.wait_for_load_state("networkidle", timeout=config.TIMEOUT)
+            page.wait_for_load_state("domcontentloaded", timeout=config.TIMEOUT)
 
-            # 2. Clica no menu lateral 'Consultas' para expandir
+            # 2. Clica no menu lateral 'Consultas'
             menu_consultas = page.get_by_text("Consultas", exact=True)
             menu_consultas.click()
 
-            # 3. Clica no PRIMEIRO link 'Nota Fiscal'
+            # 3. Clica no link 'Nota Fiscal'
             opt_nota = page.get_by_role("link", name="Nota Fiscal").first
             opt_nota.click()
 
@@ -64,19 +65,17 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
 
-                # Aguarda os resultados carregarem
+                # Aguarda dinamicamente o resultado aparecer na tela
                 seletor_celula = "td:nth-child(4) > .st-cell-content"
                 page.wait_for_selector(seletor_celula, timeout=config.TIMEOUT)
 
                 status_texto = page.locator(seletor_celula).inner_text()
                 
-                # Extrai a Nota Fiscal usando Expressão Regular
+                # Extrai a Nota Fiscal e Imposto
                 match_nota = re.search(r"Nota\s*fiscal:\s*(.*)", status_texto, re.IGNORECASE)
-                # Extrai o Imposto usando Expressão Regular
                 match_imposto = re.search(r"Imposto:\s*(.*)", status_texto, re.IGNORECASE)
 
                 if match_nota:
-                    # Remove eventual "Imposto: ..." se tiver vindo na mesma linha
                     nota_val = match_nota.group(1).split("Imposto:")[0].split("\n")[0].strip()
                     resultado_item["nota"] = nota_val if nota_val else "N/A"
                 else:
@@ -86,13 +85,17 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
                     imposto_val = match_imposto.group(1).split("\n")[0].strip()
                     resultado_item["imposto"] = imposto_val if imposto_val else "Não Informado"
                 else:
-                    # Fallback caso não tenha o rótulo "Imposto:"
                     linhas = [l.strip() for l in status_texto.split("\n") if l.strip()]
                     resultado_item["imposto"] = " / ".join(linhas) if linhas else "Não Informado"
 
-                # Define a Situação Final
+                # REGRA RIGOROSA DE STATUS:
+                # Só marca LIBERADA se tiver a palavra PAGO e NÃO tiver nenhuma indicação de pendência.
                 texto_completo = status_texto.upper()
-                if "PAGO" in texto_completo and "A PAGAR" not in texto_completo and "PENDENTE" not in texto_completo:
+                termos_pendentes = ["A PAGAR", "PENDENTE", "GERADO", "DEBITO", "PARCELA", "A RECOLHER", "SUBT"]
+                
+                tem_pendencia = any(termo in texto_completo for termo in termos_pendentes)
+
+                if "PAGO" in texto_completo and not tem_pendencia:
                     resultado_item["situacao"] = "LIBERADA"
                 else:
                     resultado_item["situacao"] = "PENDENTE"
@@ -109,6 +112,11 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
             if callback_progresso:
                 callback_progresso(atual=indice, total=total_chaves, item=resultado_item)
 
+            # Pausa de 0.3 segundos para estabilidade do servidor em grandes lotes
+            time.sleep(0.3)
+
         browser.close()
+
+    return resultados
 
     return resultados
