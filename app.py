@@ -1,6 +1,7 @@
 import base64
 import os
 import pandas as pd
+import requests
 import streamlit as st
 from excel import salvar_resultados_excel
 from sitram import consultar_chaves_sitram
@@ -71,14 +72,14 @@ st.markdown(
             font-weight: 700 !important;
         }
 
-        label, .stRadio label, .stTextArea label, .stFileUploader label {
+        label, .stRadio label, .stTextArea label, .stFileUploader label, .stTextInput label, .stSelectbox label {
             color: #FFFFFF !important;
             font-size: 15px !important;
             font-weight: 600 !important;
         }
 
-        /* Campo de Digitação */
-        .stTextArea textarea {
+        /* Campo de Digitação e Inputs */
+        .stTextArea textarea, .stTextInput input {
             background-color: #162235 !important;
             color: #FFFFFF !important;
             -webkit-text-fill-color: #FFFFFF !important;
@@ -86,17 +87,15 @@ st.markdown(
             font-weight: 600 !important;
             border: 2px solid #334155 !important;
             border-radius: 8px !important;
+        }
+
+        .stTextArea textarea {
             font-family: monospace !important;
         }
 
-        .stTextArea textarea:focus {
+        .stTextArea textarea:focus, .stTextInput input:focus {
             border-color: #E2001A !important;
             box-shadow: 0 0 0 1px #E2001A !important;
-        }
-
-        .stTextArea textarea::placeholder {
-            color: #94A3B8 !important;
-            -webkit-text-fill-color: #94A3B8 !important;
         }
 
         /* Botão Vermelho LATAM */
@@ -117,7 +116,7 @@ st.markdown(
             background-color: #C10016 !important;
         }
 
-        /* Cards Informativos para Preencher Espaço */
+        /* Cards Informativos */
         .latam-card {
             background-color: #162235;
             border: 1px solid #23354E;
@@ -294,6 +293,43 @@ with col_direita:
                     <li>Ao finalizar, o relatório é gerado automaticamente em Excel.</li>
                 </ul>
             </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+# --- 5. SEÇÃO DE FEEDBACK (FORMSPREE) ---
+st.markdown("<br><hr>", unsafe_allow_html=True)
+st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
+st.write("Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!")
+
+FORMSPREE_ID = "mrenybwd"  # <--- COLE O SEU ID DO FORMSPREE AQUI
+FORMSPREE_URL = f"https://formspree.io/f/{mrenybwd}"
+
+with st.form(key="form_feedback_formspree", clear_on_submit=True):
+    nome_usuario = st.text_input("Seu nome (opcional):", placeholder="Ex: João Silva")
+    tipo_mensagem = st.selectbox("O que você deseja reportar?", ["Erro / Bug no resultado", "Sugestão de melhoria", "Outro"])
+    mensagem = st.text_area("Descreva o erro ou sugestão em detalhes:", placeholder="Escreva aqui...")
+    
+    btn_enviar_feedback = st.form_submit_button("Enviar Feedback 🚀")
+
+if btn_enviar_feedback:
+    if not mensagem.strip():
+        st.warning("Por favor, digite uma mensagem antes de enviar.")
+    else:
+        dados_envio = {
+            "nome": nome_usuario or "Anônimo",
+            "tipo": tipo_mensagem,
+            "mensagem": mensagem
+        }
+        
+        try:
+            resposta = requests.post(FORMSPREE_URL, data=dados_envio)
+            if resposta.status_code == 200:
+                st.success("Obrigado! Seu feedback foi enviado direto para o desenvolvedor.")
+            else:
+                st.error("Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
+        except Exception as e:
+            st.error(f"Erro ao conectar com o servidor: {e}")
         """,
             unsafe_allow_html=True,
         )
