@@ -65,9 +65,12 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
 
-                # Aguarda dinamicamente o resultado aparecer na tela
+                # Aguarda dinamicamente o resultado carregar na tela
                 seletor_celula = "td:nth-child(4) > .st-cell-content"
                 page.wait_for_selector(seletor_celula, timeout=config.TIMEOUT)
+
+                # Pausa estratégica para garantir que a SEFAZ atualizou todo o conteúdo do elemento
+                time.sleep(1.5)
 
                 status_texto = page.locator(seletor_celula).inner_text()
                 
@@ -88,7 +91,7 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
                     linhas = [l.strip() for l in status_texto.split("\n") if l.strip()]
                     resultado_item["imposto"] = " / ".join(linhas) if linhas else "Não Informado"
 
-                # REGRA DE STATUS AJUSTADA
+                # REGRA DE STATUS
                 texto_completo = status_texto.upper()
 
                 # Verifica se há cobrança pendente explícita
@@ -112,8 +115,10 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
             if callback_progresso:
                 callback_progresso(atual=indice, total=total_chaves, item=resultado_item)
 
-            time.sleep(0.3)
+            # Pausa de 8 segundos entre cada consulta para evitar acúmulo e falsos dados
+            time.sleep(8.0)
 
         browser.close()
 
+    return resultados
     return resultados
