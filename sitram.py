@@ -115,10 +115,9 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
             if callback_progresso:
                 callback_progresso(atual=indice, total=total_chaves, item=resultado_item)
 
-            # Pausa de 8 segundos entre cada consulta para evitar acúmulo e falsos dados
-            time.sleep(8.0)
+            # Pausa de 6 segundos entre cada consulta para evitar sobrescrita de dados da chave anterior
+            time.sleep(6.0)
 
         browser.close()
 
-    return resultados
     return resultados
