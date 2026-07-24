@@ -23,6 +23,10 @@ def get_image_base64(path):
 
 logo_b64 = get_image_base64("latam_logo.png")
 
+# Inicializa o estado de memória (Session State) para persistir os resultados
+if "resultados_finais" not in st.session_state:
+    st.session_state["resultados_finais"] = None
+
 # 2. Estilização CSS Corporativa LATAM
 st.markdown(
     """
@@ -218,6 +222,7 @@ with col_esquerda:
 with col_direita:
     st.subheader("2. Painel de Acompanhamento")
 
+    # Ação acionada ao clicar no botão de consulta
     if btn_iniciar:
         if not chaves_lista:
             st.warning("Insira ao menos uma chave de acesso para iniciar.")
@@ -253,24 +258,33 @@ with col_direita:
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
 
-            # Converte os resultados em CSV para abrir fácil no Google Sheets
-            df_final = pd.DataFrame(resultados)
-            df_final.columns = [
-                "Chave / Ação Fiscal",
-                "Nota Fiscal",
-                "Situação Imposto",
-                "Status Final",
-            ]
-            
-            csv_data = df_final.to_csv(index=False, sep=";", encoding="utf-8-sig")
+            # Salva na memória persitente da sessão do Streamlit
+            st.session_state["resultados_finais"] = resultados
 
-            st.download_button(
-                label="📥 Baixar Planilha para Google Sheets (.csv)",
-                data=csv_data,
-                file_name="Relatorio_Saneamento_LATAM.csv",
-                mime="text/csv",
-            )
-    else:
+    # Exibe os resultados persistidos caso existam na memória
+    if st.session_state["resultados_finais"] is not None:
+        if not btn_iniciar:
+            st.success("Resultados da última consulta mantidos na tela:")
+
+        df_final = pd.DataFrame(st.session_state["resultados_finais"])
+        df_final.columns = [
+            "Chave / Ação Fiscal",
+            "Nota Fiscal",
+            "Situação Imposto",
+            "Status Final",
+        ]
+
+        st.dataframe(df_final, use_container_width=True)
+
+        csv_data = df_final.to_csv(index=False, sep=";", encoding="utf-8-sig")
+
+        st.download_button(
+            label="📥 Baixar Planilha para Google Sheets (.csv)",
+            data=csv_data,
+            file_name="Relatorio_Saneamento_LATAM.csv",
+            mime="text/csv",
+        )
+    elif not btn_iniciar:
         st.info(
             "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
         )
