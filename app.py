@@ -5,6 +5,9 @@ import requests
 import streamlit as st
 from sitram import consultar_chaves_sitram
 
+# Arquivo para armazenar os resultados em disco e evitar perda de dados
+CACHE_FILE = "resultados_cache.csv"
+
 # 1. Configuração da página
 st.set_page_config(
     page_title="LATAM Cargo | Saneamento D2D",
@@ -22,10 +25,6 @@ def get_image_base64(path):
 
 
 logo_b64 = get_image_base64("latam_logo.png")
-
-# Inicializa o estado de memória (Session State) para persistir os resultados
-if "resultados_finais" not in st.session_state:
-    st.session_state["resultados_finais"] = None
 
 # 2. Estilização CSS Corporativa LATAM
 st.markdown(
@@ -222,7 +221,6 @@ with col_esquerda:
 with col_direita:
     st.subheader("2. Painel de Acompanhamento")
 
-    # Ação acionada ao clicar no botão de consulta
     if btn_iniciar:
         if not chaves_lista:
             st.warning("Insira ao menos uma chave de acesso para iniciar.")
@@ -258,25 +256,25 @@ with col_direita:
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
 
-            # Salva na memória persitente da sessão do Streamlit
-            st.session_state["resultados_finais"] = resultados
+            # Salva o arquivo em disco local como backup fixo
+            df_final = pd.DataFrame(resultados)
+            df_final.columns = [
+                "Chave / Ação Fiscal",
+                "Nota Fiscal",
+                "Situação Imposto",
+                "Status Final",
+            ]
+            df_final.to_csv(CACHE_FILE, index=False, sep=";", encoding="utf-8-sig")
 
-    # Exibe os resultados persistidos caso existam na memória
-    if st.session_state["resultados_finais"] is not None:
+    # Exibe a tabela salva em disco se ela existir (mesmo apos a tela fechar/bloquear)
+    if os.path.exists(CACHE_FILE):
         if not btn_iniciar:
-            st.success("Resultados da última consulta mantidos na tela:")
+            st.info("📌 Exibindo os resultados da sua última consulta gravada:")
 
-        df_final = pd.DataFrame(st.session_state["resultados_finais"])
-        df_final.columns = [
-            "Chave / Ação Fiscal",
-            "Nota Fiscal",
-            "Situação Imposto",
-            "Status Final",
-        ]
+        df_cache = pd.read_csv(CACHE_FILE, sep=";")
+        st.dataframe(df_cache, use_container_width=True)
 
-        st.dataframe(df_final, use_container_width=True)
-
-        csv_data = df_final.to_csv(index=False, sep=";", encoding="utf-8-sig")
+        csv_data = df_cache.to_csv(index=False, sep=";", encoding="utf-8-sig")
 
         st.download_button(
             label="📥 Baixar Planilha para Google Sheets (.csv)",
@@ -323,8 +321,8 @@ st.markdown("<br><hr>", unsafe_allow_html=True)
 st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
 st.write("Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!")
 
-FORMSPREE_ID = "mrenybwd"  # <--- COLOQUE O SEU ID DO FORMSPREE AQUI
-FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
+FORMSPREE_ID = "SEU_ID_AQUI"  # <--- COLOQUE O SEU ID DO FORMSPREE AQUI
+FORMSPREE_URL = f"https://formspree.io/f/{FORMSPREE_ID}"
 
 with st.form(key="form_feedback_formspree", clear_on_submit=True):
     nome_usuario = st.text_input("Seu nome (opcional):", placeholder="Ex: João Silva")
@@ -348,6 +346,6 @@ if btn_enviar_feedback:
             if resposta.status_code == 200:
                 st.success("Obrigado! Seu feedback foi enviado direto para o desenvolvedor.")
             else:
-                st.error("Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
+                st.error("Não foi possible enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
         except Exception as e:
             st.error(f"Erro ao conectar com o servidor: {e}")
