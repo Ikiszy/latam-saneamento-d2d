@@ -5,7 +5,7 @@ import requests
 import streamlit as st
 from sitram import consultar_chaves_sitram
 
-# Arquivo para armazenar os resultados em disco e evitar perda de dados
+# Nome do arquivo de backup temporário
 CACHE_FILE = "resultados_cache.csv"
 
 # 1. Configuração da página
@@ -25,6 +25,10 @@ def get_image_base64(path):
 
 
 logo_b64 = get_image_base64("latam_logo.png")
+
+# Inicializa o estado de memória (Session State)
+if "resultados_finais" not in st.session_state:
+    st.session_state["resultados_finais"] = None
 
 # 2. Estilização CSS Corporativa LATAM
 st.markdown(
@@ -256,25 +260,46 @@ with col_direita:
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
 
-            # Salva o arquivo em disco local como backup fixo
-            df_final = pd.DataFrame(resultados)
-            df_final.columns = [
-                "Chave / Ação Fiscal",
-                "Nota Fiscal",
-                "Situação Imposto",
-                "Status Final",
-            ]
-            df_final.to_csv(CACHE_FILE, index=False, sep=";", encoding="utf-8-sig")
+            # Armazena na memória da sessão
+            st.session_state["resultados_finais"] = resultados
 
-    # Exibe a tabela salva em disco se ela existir (mesmo apos a tela fechar/bloquear)
-    if os.path.exists(CACHE_FILE):
+            # Tenta salvar backup local (sem interromper se houver falha de escrita)
+            try:
+                df_final = pd.DataFrame(resultados)
+                df_final.columns = [
+                    "Chave / Ação Fiscal",
+                    "Nota Fiscal",
+                    "Situação Imposto",
+                    "Status Final",
+                ]
+                df_final.to_csv(CACHE_FILE, index=False, sep=";", encoding="utf-8-sig")
+            except Exception:
+                pass
+
+    # Exibe os resultados (Memória de Sessão ou Backup em Disco)
+    df_exibir = None
+
+    if st.session_state["resultados_finais"] is not None:
+        df_exibir = pd.DataFrame(st.session_state["resultados_finais"])
+        df_exibir.columns = [
+            "Chave / Ação Fiscal",
+            "Nota Fiscal",
+            "Situação Imposto",
+            "Status Final",
+        ]
+    elif os.path.exists(CACHE_FILE) and not btn_iniciar:
+        try:
+            df_exibir = pd.read_csv(CACHE_FILE, sep=";")
+        except Exception:
+            df_exibir = None
+
+    if df_exibir is not None:
         if not btn_iniciar:
-            st.info("📌 Exibindo os resultados da sua última consulta gravada:")
+            st.info("📌 Exibindo os resultados da última consulta realizada:")
 
-        df_cache = pd.read_csv(CACHE_FILE, sep=";")
-        st.dataframe(df_cache, use_container_width=True)
+        st.dataframe(df_exibir, use_container_width=True)
 
-        csv_data = df_cache.to_csv(index=False, sep=";", encoding="utf-8-sig")
+        csv_data = df_exibir.to_csv(index=False, sep=";", encoding="utf-8-sig")
 
         st.download_button(
             label="📥 Baixar Planilha para Google Sheets (.csv)",
@@ -321,7 +346,7 @@ st.markdown("<br><hr>", unsafe_allow_html=True)
 st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
 st.write("Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!")
 
-FORMSPREE_ID = "mrenybwd"  # <--- COLOQUE O SEU ID DO FORMSPREE AQUI
+FORMSPREE_ID = "mrenybwd"  # <--- LEMBRE-SE DE COLOCAR SEU ID DO FORMSPREE AQUI
 FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
 
 with st.form(key="form_feedback_formspree", clear_on_submit=True):
@@ -346,6 +371,6 @@ if btn_enviar_feedback:
             if resposta.status_code == 200:
                 st.success("Obrigado! Seu feedback foi enviado direto para o desenvolvedor.")
             else:
-                st.error("Não foi possible enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
+                st.error("Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
         except Exception as e:
             st.error(f"Erro ao conectar com o servidor: {e}")
