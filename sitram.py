@@ -2,10 +2,13 @@ import os
 import re
 import time
 import subprocess
+import pandas as pd
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import config
 
-# Garante que os navegadores do Playwright estejam instalados na nuvem
+CACHE_FILE = "resultados_cache.csv"
+
+# Garante que os navegadores do Playwright estejam instalados
 try:
     subprocess.run(["playwright", "install", "chromium"], check=True)
 except Exception as e:
@@ -13,8 +16,15 @@ except Exception as e:
 
 
 def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
-    """Navega pelo menu do SITRAM e pesquisa as chaves informadas de forma otimizada."""
+    """Navega pelo menu do SITRAM e pesquisa as chaves informadas."""
     resultados = []
+
+    # Se já existir um arquivo temporário de uma busca anterior, limpa ele ao iniciar uma nova
+    if os.path.exists(CACHE_FILE):
+        try:
+            os.remove(CACHE_FILE)
+        except Exception:
+            pass
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=config.HEADLESS, slow_mo=config.SLOW_MO)
@@ -33,7 +43,6 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
             opt_nota = page.get_by_role("link", name="Nota Fiscal").first
             opt_nota.click()
 
-            # Aguarda o campo de busca estar disponível
             page.wait_for_selector("input, textarea", timeout=config.TIMEOUT)
 
         except Exception as e:
@@ -54,27 +63,22 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
             }
 
             try:
-                # Preenche a chave
                 campo = page.get_by_role("textbox")
                 campo.click()
                 page.keyboard.press("Control+A")
                 page.keyboard.press("Backspace")
                 campo.fill(chave)
 
-                # Clica em Pesquisar
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
 
-                # Aguarda dinamicamente o resultado carregar na tela
                 seletor_celula = "td:nth-child(4) > .st-cell-content"
                 page.wait_for_selector(seletor_celula, timeout=config.TIMEOUT)
 
-                # Pausa estratégica para garantir que a SEFAZ atualizou todo o conteúdo do elemento
                 time.sleep(1.5)
 
                 status_texto = page.locator(seletor_celula).inner_text()
                 
-                # Extrai a Nota Fiscal e Imposto
                 match_nota = re.search(r"Nota\s*fiscal:\s*(.*)", status_texto, re.IGNORECASE)
                 match_imposto = re.search(r"Imposto:\s*(.*)", status_texto, re.IGNORECASE)
 
@@ -91,13 +95,9 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
                     linhas = [l.strip() for l in status_texto.split("\n") if l.strip()]
                     resultado_item["imposto"] = " / ".join(linhas) if linhas else "Não Informado"
 
-                # REGRA DE STATUS
                 texto_completo = status_texto.upper()
-
-                # Verifica se há cobrança pendente explícita
                 tem_cobranca_ativa = any(termo in texto_completo for termo in ["A PAGAR", "A RECOLHER", "PENDENTE"])
 
-                # Se consta PAGO ou PAGA e não há cobrança ativa -> LIBERADA
                 if ("PAGO" in texto_completo or "PAGA" in texto_completo) and not tem_cobranca_ativa:
                     resultado_item["situacao"] = "LIBERADA"
                 else:
@@ -112,10 +112,22 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
 
             resultados.append(resultado_item)
 
+            # SALVAMENTO EM TEMPO REAL: Escreve no disco item por item
+            try:
+                df_parcial = pd.DataFrame(resultados)
+                df_parcial.columns = [
+                    "Chave / Ação Fiscal",
+                    "Nota Fiscal",
+                    "Situação Imposto",
+                    "Status Final",
+                ]
+                df_parcial.to_csv(CACHE_FILE, index=False, sep=";", encoding="utf-8-sig")
+            except Exception:
+                pass
+
             if callback_progresso:
                 callback_progresso(atual=indice, total=total_chaves, item=resultado_item)
 
-            # Pausa de 6 segundos entre cada consulta para evitar sobrescrita de dados da chave anterior
             time.sleep(6.0)
 
         browser.close()
