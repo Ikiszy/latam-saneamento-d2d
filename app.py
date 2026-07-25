@@ -207,7 +207,7 @@ with col_esquerda:
                     if linha.decode("utf-8").strip()
                 ]
             else:
-                df_upload = pd.read_excel(arquivo)
+                df_upload = pd.read_excel(arquivo, dtype=str)
                 chaves_lista = df_upload.iloc[:, 0].astype(str).tolist()
 
     st.write(f"**Total de chaves identificadas:** `{len(chaves_lista)}`")
@@ -234,7 +234,7 @@ with col_direita:
                 )
                 resultados_em_tempo_real.append(item)
 
-                df_temp = pd.DataFrame(resultados_em_tempo_real)
+                df_temp = pd.DataFrame(resultados_em_tempo_real).astype(str)
                 df_temp.columns = [
                     "Chave / Ação Fiscal",
                     "Nota Fiscal",
@@ -252,11 +252,11 @@ with col_direita:
             st.success("Consulta finalizada com sucesso!")
             st.session_state["resultados_finais"] = resultados
 
-    # Lógica de exibição e resgate do backup parcial/total
+    # Lógica de exibição e resgate do backup convertendo estritamente para string
     df_exibir = None
 
     if st.session_state["resultados_finais"] is not None:
-        df_exibir = pd.DataFrame(st.session_state["resultados_finais"])
+        df_exibir = pd.DataFrame(st.session_state["resultados_finais"]).astype(str)
         df_exibir.columns = [
             "Chave / Ação Fiscal",
             "Nota Fiscal",
@@ -265,7 +265,9 @@ with col_direita:
         ]
     elif os.path.exists(CACHE_FILE) and not btn_iniciar:
         try:
-            df_exibir = pd.read_csv(CACHE_FILE, sep=";")
+            # Força o pandas a ler todas as colunas como Texto puro (dtype=str)
+            df_exibir = pd.read_csv(CACHE_FILE, sep=";", dtype=str)
+            df_exibir = df_exibir.astype(str)
         except Exception:
             df_exibir = None
 
@@ -273,6 +275,7 @@ with col_direita:
         if not btn_iniciar:
             st.info("📌 Exibindo os resultados recuperados da sua última consulta:")
 
+        # Garante que não haja conversões numéricas acidentais antes de mandar pro Streamlit
         st.dataframe(df_exibir, use_container_width=True)
 
         csv_data = df_exibir.to_csv(index=False, sep=";", encoding="utf-8-sig")
