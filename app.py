@@ -5,7 +5,6 @@ import requests
 import streamlit as st
 from sitram import consultar_chaves_sitram
 
-# Nome do arquivo de backup temporário
 CACHE_FILE = "resultados_cache.csv"
 
 # 1. Configuração da página
@@ -26,7 +25,6 @@ def get_image_base64(path):
 
 logo_b64 = get_image_base64("latam_logo.png")
 
-# Inicializa o estado de memória (Session State)
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
@@ -34,13 +32,11 @@ if "resultados_finais" not in st.session_state:
 st.markdown(
     """
     <style>
-        /* Fundo Geral - Azul Marinho LATAM */
         .stApp {
             background-color: #0D192B !important;
             color: #FFFFFF !important;
         }
 
-        /* Banner Indigo/Roxo no Topo */
         .latam-banner {
             background: linear-gradient(135deg, #1B0034 0%, #2A0052 100%);
             padding: 35px 20px;
@@ -71,7 +67,6 @@ st.markdown(
             margin: 0 !important;
         }
 
-        /* Títulos e Labels */
         .stMarkdown h2, .stMarkdown h3 {
             color: #FFFFFF !important;
             font-size: 22px !important;
@@ -84,7 +79,6 @@ st.markdown(
             font-weight: 600 !important;
         }
 
-        /* Campo de Digitação e Inputs */
         .stTextArea textarea, .stTextInput input {
             background-color: #162235 !important;
             color: #FFFFFF !important;
@@ -104,7 +98,6 @@ st.markdown(
             box-shadow: 0 0 0 1px #E2001A !important;
         }
 
-        /* Botão Vermelho LATAM */
         div.stButton > button {
             background-color: #E2001A !important;
             color: #FFFFFF !important;
@@ -122,7 +115,6 @@ st.markdown(
             background-color: #C10016 !important;
         }
 
-        /* Cards Informativos */
         .latam-card {
             background-color: #162235;
             border: 1px solid #23354E;
@@ -151,7 +143,6 @@ st.markdown(
             margin-top: 10px;
         }
 
-        /* Reestilização do Alert */
         .stAlert {
             background-color: #162235 !important;
             color: #FFFFFF !important;
@@ -259,24 +250,9 @@ with col_direita:
 
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
-
-            # Armazena na memória da sessão
             st.session_state["resultados_finais"] = resultados
 
-            # Tenta salvar backup local (sem interromper se houver falha de escrita)
-            try:
-                df_final = pd.DataFrame(resultados)
-                df_final.columns = [
-                    "Chave / Ação Fiscal",
-                    "Nota Fiscal",
-                    "Situação Imposto",
-                    "Status Final",
-                ]
-                df_final.to_csv(CACHE_FILE, index=False, sep=";", encoding="utf-8-sig")
-            except Exception:
-                pass
-
-    # Exibe os resultados (Memória de Sessão ou Backup em Disco)
+    # Lógica de exibição e resgate do backup parcial/total
     df_exibir = None
 
     if st.session_state["resultados_finais"] is not None:
@@ -295,7 +271,7 @@ with col_direita:
 
     if df_exibir is not None:
         if not btn_iniciar:
-            st.info("📌 Exibindo os resultados da última consulta realizada:")
+            st.info("📌 Exibindo os resultados recuperados da sua última consulta:")
 
         st.dataframe(df_exibir, use_container_width=True)
 
@@ -312,7 +288,6 @@ with col_direita:
             "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
         )
 
-        # Card 1: Propósito LATAM
         st.markdown(
             """
             <div class="latam-card">
@@ -325,15 +300,13 @@ with col_direita:
             unsafe_allow_html=True,
         )
 
-        # Card 2: Dicas de Operação
         st.markdown(
             """
             <div class="latam-card">
                 <div class="latam-card-title">💡 Dicas de Processamento D2D</div>
                 <ul style="color: #CBD5E1; font-size: 14px; margin-bottom: 0; padding-left: 20px;">
                     <li>Você pode colar até centenas de chaves de uma só vez.</li>
-                    <li>Arquivos <b>.TXT</b> devem conter 1 chave por linha.</li>
-                    <li>Planilhas <b>.XLSX</b> devem ter as chaves na primeira coluna.</li>
+                    <li>O robô salva cada resultado em tempo real para evitar perdas se a tela fechar.</li>
                     <li>Ao finalizar, o arquivo <b>.CSV</b> gerado pode ser aberto direto no Google Sheets.</li>
                 </ul>
             </div>
