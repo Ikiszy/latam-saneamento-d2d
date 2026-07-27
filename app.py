@@ -28,18 +28,23 @@ logo_b64 = get_image_base64("latam_logo.png")
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
-# 2. Estilização CSS Moderna & Refinada (Roadmap Visual)
+# 2. Estilização CSS Anti-Modo Claro (Força Tema Escuro Permanente)
 st.markdown(
     """
     <style>
-        /* Fundo Geral - Cinza Escuro Sombrio (Não Preto Puro) */
-        .stApp {
+        /* Força fundo escuro geral e texto claro em qualquer modo do navegador */
+        html, body, [data-testid="stAppViewContainer"], .stApp {
             background-color: #0B101D !important;
-            color: #E2E8F0 !important;
+            color: #F8FAFC !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
         }
 
-        /* Banner Topo Moderno e Espaçoso */
+        /* Cor global de todos os textos informativos e títulos */
+        p, span, div, label, h1, h2, h3, h4, h5, h6, .stMarkdown {
+            color: #F8FAFC !important;
+        }
+
+        /* Banner Topo Moderno */
         .latam-banner {
             background: linear-gradient(135deg, #18002E 0%, #250046 100%);
             padding: 30px 24px;
@@ -57,7 +62,6 @@ st.markdown(
             margin-bottom: 12px;
         }
 
-        /* Redução do Título Principal */
         .latam-banner h1 {
             color: #FFFFFF !important;
             font-size: 28px !important;
@@ -72,23 +76,8 @@ st.markdown(
             margin: 0 !important;
         }
 
-        /* Hierarquia Tipográfica dos Subtítulos */
-        .stMarkdown h2, .stMarkdown h3 {
-            color: #F8FAFC !important;
-            font-size: 18px !important;
-            font-weight: 600 !important;
-            margin-bottom: 16px !important;
-            letter-spacing: -0.3px;
-        }
-
-        label, .stRadio label, .stTextArea label, .stFileUploader label, .stTextInput label, .stSelectbox label {
-            color: #CBD5E1 !important;
-            font-size: 14px !important;
-            font-weight: 500 !important;
-        }
-
-        /* Entrada de Dados - Inputs com mais 'Ar' */
-        .stTextArea textarea, .stTextInput input {
+        /* Inputs e Caixas de Texto (Garante fundo escuro) */
+        .stTextArea textarea, .stTextInput input, .stSelectbox [data-baseweb="select"] {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
             -webkit-text-fill-color: #F8FAFC !important;
@@ -96,19 +85,13 @@ st.markdown(
             font-weight: 500 !important;
             border: 1px solid #2A364F !important;
             border-radius: 10px !important;
-            padding: 12px !important;
         }
 
         .stTextArea textarea {
             font-family: monospace !important;
         }
 
-        .stTextArea textarea:focus, .stTextInput input:focus {
-            border-color: #E2001A !important;
-            box-shadow: 0 0 0 2px rgba(226, 0, 26, 0.2) !important;
-        }
-
-        /* Botão Moderno Arredondado com Destaque Sutil */
+        /* Botão Principal */
         div.stButton > button {
             background: linear-gradient(135deg, #E2001A 0%, #B80015 100%) !important;
             color: #FFFFFF !important;
@@ -126,54 +109,49 @@ st.markdown(
         div.stButton > button:hover {
             background: linear-gradient(135deg, #FF1A35 0%, #D10018 100%) !important;
             transform: translateY(-1px);
-            box-shadow: 0 6px 18px rgba(226, 0, 26, 0.45);
         }
 
-        /* Containers e Cards com Bordas Arredondadas */
+        /* Containers e Cards */
         .latam-card {
-            background-color: #131B2E;
-            border: 1px solid #1E293B;
+            background-color: #131B2E !important;
+            border: 1px solid #1E293B !important;
             border-radius: 12px;
             padding: 22px;
             margin-bottom: 20px;
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
         }
 
-        .latam-card-title {
-            color: #E2001A;
-            font-size: 14px;
-            font-weight: 700;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
-
         .latam-quote {
             font-style: italic;
-            color: #94A3B8;
+            color: #94A3B8 !important;
             font-size: 14px;
             line-height: 1.6;
             border-left: 3px solid #E2001A;
             padding-left: 14px;
         }
 
-        /* Refinamento da Tabela (Sem linhas verticais e mais altura) */
-        [data-testid="stDataFrame"] {
+        /* TABELA DE RESULTADOS (Força Fundo Escuro no Modo Claro) */
+        [data-testid="stDataFrame"], [data-testid="stTable"], .stDataFrame {
             background-color: #131B2E !important;
             border-radius: 10px !important;
             border: 1px solid #1E293B !important;
-            padding: 8px !important;
         }
 
+        /* Força a renderização interna do Glide Data Grid (usado pelo st.dataframe) */
+        div[data-testid="stDataFrame"] iframe {
+            filter: invert(0.9) hue-rotate(180deg) !important;
+        }
+
+        /* Customização dos alertas do Streamlit */
         .stAlert {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
             border: 1px solid #1E293B !important;
             border-radius: 10px !important;
         }
-
-        hr {
-            border-color: #1E293B !important;
+        
+        .stAlert p {
+            color: #F8FAFC !important;
         }
     </style>
 """,
@@ -281,7 +259,7 @@ with col_direita:
             st.success("Consulta finalizada com sucesso!")
             st.session_state["resultados_finais"] = resultados
 
-    # Lógica de exibição e resgate do backup convertendo estritamente para string
+    # Lógica de exibição e resgate do backup
     df_exibir = None
 
     if st.session_state["resultados_finais"] is not None:
