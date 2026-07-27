@@ -28,7 +28,7 @@ logo_b64 = get_image_base64("latam_logo.png")
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
-# 2. Estilização CSS Totalmente Corrigida (Resolve Dataframe + Feedback)
+# 2. Estilização CSS (Novo Header Clean & Corporativo)
 st.markdown(
     """
     <style>
@@ -43,39 +43,52 @@ st.markdown(
             color: #F8FAFC !important;
         }
 
-        /* Banner Topo Moderno */
-        .latam-banner {
-            background: linear-gradient(135deg, #18002E 0%, #250046 100%);
-            padding: 30px 24px;
-            border-radius: 14px;
-            text-align: center;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            margin-bottom: 30px;
+        /* HEADER MODERNO CORPORATIVO (LADO A LADO) */
+        .latam-header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 24px;
+            background: linear-gradient(90deg, #18002E 0%, #131B2E 100%);
+            padding: 18px 28px;
+            border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            margin-bottom: 25px;
         }
 
-        .latam-banner img {
-            max-width: 320px !important;
-            width: 100% !important;
+        .latam-header img {
+            max-width: 180px !important;
+            width: auto !important;
             height: auto;
-            margin-bottom: 12px;
+            object-fit: contain;
         }
 
-        .latam-banner h1 {
+        .latam-header-text {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            border-left: 2px solid rgba(226, 0, 26, 0.6);
+            padding-left: 20px;
+        }
+
+        .latam-header h1 {
             color: #FFFFFF !important;
-            font-size: 28px !important;
+            font-size: 22px !important;
             font-weight: 700 !important;
-            margin: 8px 0 4px 0 !important;
-            letter-spacing: -0.5px;
+            margin: 0 0 2px 0 !important;
+            letter-spacing: -0.3px;
+            line-height: 1.2;
         }
 
-        .latam-banner p {
+        .latam-header p {
             color: #94A3B8 !important;
-            font-size: 15px !important;
+            font-size: 13px !important;
             margin: 0 !important;
+            font-weight: 400;
         }
 
-        /* Fix Inputs e Textareas */
+        /* Inputs e Textareas */
         .stTextArea textarea, .stTextInput input {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
@@ -89,7 +102,7 @@ st.markdown(
             font-family: monospace !important;
         }
 
-        /* CORREÇÃO DO SELECTBOX (O que você deseja reportar?) */
+        /* Selectbox */
         div[data-baseweb="select"] > div {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
@@ -101,7 +114,7 @@ st.markdown(
             color: #F8FAFC !important;
         }
 
-        /* CORREÇÃO DO BOTÃO ENVIAR FEEDBACK E OUTROS BOTÕES DE FORMULÁRIO */
+        /* Botões */
         div.stButton > button, div.stDownloadButton > button, div[data-testid="stFormSubmitButton"] > button {
             background: linear-gradient(135deg, #E2001A 0%, #B80015 100%) !important;
             color: #FFFFFF !important;
@@ -121,7 +134,7 @@ st.markdown(
             transform: translateY(-1px);
         }
 
-        /* Containers e Cards */
+        /* Cards Container */
         .latam-card {
             background-color: #131B2E !important;
             border: 1px solid #1E293B !important;
@@ -140,21 +153,20 @@ st.markdown(
             padding-left: 14px;
         }
 
-        /* FIX COR DA TABELA DATAFRAME NO MODO CLARO DO NAVEGADOR */
+        /* DataFrame FIX */
         [data-testid="stDataFrame"] {
             background-color: #131B2E !important;
             border-radius: 10px;
             border: 1px solid #2A364F;
         }
 
-        /* Inverte as cores da tabela do Glide Data Grid caso o navegador force Light Mode */
         @media (prefers-color-scheme: light) {
             [data-testid="stDataFrame"] canvas {
                 filter: invert(0.92) hue-rotate(180deg) !important;
             }
         }
 
-        /* Alertas do Streamlit */
+        /* Alertas */
         .stAlert {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
@@ -170,17 +182,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 3. BANNER PRINCIPAL
-logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}"><br>' if logo_b64 else ""
+# 3. NOVO HEADER CORPORATIVO
+logo_img_tag = (
+    f'<img src="data:image/png;base64,{logo_b64}">' if logo_b64 else ""
 )
 
 st.markdown(
     f"""
-    <div class="latam-banner">
-        {logo_html}
-        <h1>Assistente de Saneamento D2D</h1>
-        <p>Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo</p>
+    <div class="latam-header">
+        {logo_img_tag}
+        <div class="latam-header-text">
+            <h1>Assistente de Saneamento D2D</h1>
+            <p>Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo</p>
+        </div>
     </div>
 """,
     unsafe_allow_html=True,
@@ -293,7 +307,6 @@ with col_direita:
         if not btn_iniciar:
             st.info("📌 Exibindo os resultados recuperados da sua última consulta:")
 
-        # Tabela nativa do Streamlit com busca/filtros ativados!
         st.dataframe(df_exibir, use_container_width=True)
 
         csv_data = df_exibir.to_csv(index=False, sep=";", encoding="utf-8-sig")
