@@ -28,7 +28,7 @@ logo_b64 = get_image_base64("latam_logo.png")
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
-# 2. Estilização CSS (Novo Header Clean & Corporativo)
+# 2. Estilização CSS (Centralizado, Logo Maior, Espaçamento Justo)
 st.markdown(
     """
     <style>
@@ -43,49 +43,38 @@ st.markdown(
             color: #F8FAFC !important;
         }
 
-        /* HEADER MODERNO CORPORATIVO (LADO A LADO) */
-        .latam-header {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 24px;
-            background: linear-gradient(90deg, #18002E 0%, #131B2E 100%);
-            padding: 18px 28px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        /* BANNER CENTRALIZADO COMPACTO */
+        .latam-banner-center {
+            background: linear-gradient(135deg, #18002E 0%, #250046 100%);
+            padding: 22px 20px 18px 20px; /* Padding menor em cima/baixo para aproximar tudo */
+            border-radius: 14px;
+            text-align: center;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
             margin-bottom: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
-        .latam-header img {
-            max-width: 180px !important;
-            width: auto !important;
+        .latam-banner-center img {
+            max-width: 260px !important; /* Logo AUMENTADA */
+            width: 100% !important;
             height: auto;
-            object-fit: contain;
+            margin-bottom: 6px; /* Bem mais perto do nome */
+            display: inline-block;
         }
 
-        .latam-header-text {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            border-left: 2px solid rgba(226, 0, 26, 0.6);
-            padding-left: 20px;
-        }
-
-        .latam-header h1 {
+        .latam-banner-center h1 {
             color: #FFFFFF !important;
-            font-size: 22px !important;
+            font-size: 26px !important;
             font-weight: 700 !important;
-            margin: 0 0 2px 0 !important;
-            letter-spacing: -0.3px;
+            margin: 2px 0 2px 0 !important; /* Nome subiu bem mais perto */
+            letter-spacing: -0.4px;
             line-height: 1.2;
         }
 
-        .latam-header p {
+        .latam-banner-center p {
             color: #94A3B8 !important;
-            font-size: 13px !important;
+            font-size: 14px !important;
             margin: 0 !important;
-            font-weight: 400;
         }
 
         /* Inputs e Textareas */
@@ -134,7 +123,7 @@ st.markdown(
             transform: translateY(-1px);
         }
 
-        /* Cards Container */
+        /* Cards Containers */
         .latam-card {
             background-color: #131B2E !important;
             border: 1px solid #1E293B !important;
@@ -182,19 +171,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 3. NOVO HEADER CORPORATIVO
-logo_img_tag = (
-    f'<img src="data:image/png;base64,{logo_b64}">' if logo_b64 else ""
+# 3. HEADER CENTRALIZADO (LOGO MAIOR + TEXTO PERTO)
+logo_html = (
+    f'<img src="data:image/png;base64,{logo_b64}"><br>' if logo_b64 else ""
 )
 
 st.markdown(
     f"""
-    <div class="latam-header">
-        {logo_img_tag}
-        <div class="latam-header-text">
-            <h1>Assistente de Saneamento D2D</h1>
-            <p>Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo</p>
-        </div>
+    <div class="latam-banner-center">
+        {logo_html}
+        <h1>Assistente de Saneamento D2D</h1>
+        <p>Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo</p>
     </div>
 """,
     unsafe_allow_html=True,
