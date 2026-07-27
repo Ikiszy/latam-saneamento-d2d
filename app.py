@@ -28,22 +28,17 @@ logo_b64 = get_image_base64("latam_logo.png")
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
-# 2. Estilização CSS Totalmente Blindada (Força Dark Mode em Tudo)
+# 2. Estilização CSS Totalmente Corrigida (Resolve Dataframe + Feedback)
 st.markdown(
     """
     <style>
-        /* Força o tema escuro em toda a árvore do HTML */
-        :root {
-            color-scheme: dark !important;
-        }
-
+        /* Força fundo escuro geral e texto claro */
         html, body, [data-testid="stAppViewContainer"], .stApp, [data-testid="stHeader"] {
             background-color: #0B101D !important;
             color: #F8FAFC !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
         }
 
-        /* Textos e Labels */
         p, span, div, label, h1, h2, h3, h4, h5, h6, .stMarkdown {
             color: #F8FAFC !important;
         }
@@ -80,13 +75,12 @@ st.markdown(
             margin: 0 !important;
         }
 
-        /* Inputs, Textareas e Selectboxes */
-        .stTextArea textarea, .stTextInput input, div[data-baseweb="select"] > div {
+        /* Fix Inputs e Textareas */
+        .stTextArea textarea, .stTextInput input {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
             -webkit-text-fill-color: #F8FAFC !important;
             font-size: 14px !important;
-            font-weight: 500 !important;
             border: 1px solid #2A364F !important;
             border-radius: 10px !important;
         }
@@ -95,28 +89,33 @@ st.markdown(
             font-family: monospace !important;
         }
 
-        /* Cor dos Menus Dropdown (Selectbox) no Modo Claro */
-        div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"], li[role="option"] {
+        /* CORREÇÃO DO SELECTBOX (O que você deseja reportar?) */
+        div[data-baseweb="select"] > div {
             background-color: #131B2E !important;
+            color: #F8FAFC !important;
+            border: 1px solid #2A364F !important;
+            border-radius: 10px !important;
+        }
+
+        div[data-baseweb="select"] span {
             color: #F8FAFC !important;
         }
 
-        /* Botão Principal e Botão de Download */
-        div.stButton > button, div.stDownloadButton > button {
+        /* CORREÇÃO DO BOTÃO ENVIAR FEEDBACK E OUTROS BOTÕES DE FORMULÁRIO */
+        div.stButton > button, div.stDownloadButton > button, div[data-testid="stFormSubmitButton"] > button {
             background: linear-gradient(135deg, #E2001A 0%, #B80015 100%) !important;
             color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
             font-weight: 600 !important;
             font-size: 15px !important;
-            height: 3em !important;
             border-radius: 10px !important;
             border: none !important;
             width: 100% !important;
-            margin-top: 14px;
-            box-shadow: 0 4px 14px rgba(226, 0, 26, 0.35);
-            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 14px rgba(226, 0, 26, 0.35) !important;
+            transition: all 0.2s ease-in-out !important;
         }
         
-        div.stButton > button:hover, div.stDownloadButton > button:hover {
+        div.stButton > button:hover, div.stDownloadButton > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
             background: linear-gradient(135deg, #FF1A35 0%, #D10018 100%) !important;
             color: #FFFFFF !important;
             transform: translateY(-1px);
@@ -141,43 +140,18 @@ st.markdown(
             padding-left: 14px;
         }
 
-        /* TABELA CUSTOMIZADA E 100% ESCURA (Substitui o Dataframe nativo) */
-        .table-container {
-            max-height: 400px;
-            overflow-y: auto;
+        /* FIX COR DA TABELA DATAFRAME NO MODO CLARO DO NAVEGADOR */
+        [data-testid="stDataFrame"] {
+            background-color: #131B2E !important;
             border-radius: 10px;
-            border: 1px solid #1E293B;
-            margin-bottom: 15px;
+            border: 1px solid #2A364F;
         }
 
-        table.custom-table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #131B2E;
-            color: #F8FAFC;
-            font-size: 13px;
-            text-align: left;
-        }
-
-        table.custom-table th {
-            background-color: #182238;
-            color: #E2001A;
-            padding: 12px;
-            position: sticky;
-            top: 0;
-            border-bottom: 2px solid #2A364F;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        table.custom-table td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #1E293B;
-            word-break: break-all;
-        }
-
-        table.custom-table tr:hover {
-            background-color: #1C2840;
+        /* Inverte as cores da tabela do Glide Data Grid caso o navegador force Light Mode */
+        @media (prefers-color-scheme: light) {
+            [data-testid="stDataFrame"] canvas {
+                filter: invert(0.92) hue-rotate(180deg) !important;
+            }
         }
 
         /* Alertas do Streamlit */
@@ -195,24 +169,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-
-# Função para desenhar a tabela escura sem depender do componente nativo do Streamlit
-def exibir_tabela_escura(df):
-    html = '<div class="table-container"><table class="custom-table"><thead><tr>'
-    for col in df.columns:
-        html += f"<th>{col}</th>"
-    html += "</tr></thead><tbody>"
-
-    for _, row in df.iterrows():
-        html += "<tr>"
-        for val in row:
-            html += f"<td>{val}</td>"
-        html += "</tr>"
-
-    html += "</tbody></table></div>"
-    return html
-
 
 # 3. BANNER PRINCIPAL
 logo_html = (
@@ -304,9 +260,7 @@ with col_direita:
                     "Situação Imposto",
                     "Status Final",
                 ]
-                tabela_placeholder.markdown(
-                    exibir_tabela_escura(df_temp), unsafe_allow_html=True
-                )
+                tabela_placeholder.dataframe(df_temp, use_container_width=True)
 
             with st.spinner("Consultando dados na SEFAZ..."):
                 resultados = consultar_chaves_sitram(
@@ -339,8 +293,8 @@ with col_direita:
         if not btn_iniciar:
             st.info("📌 Exibindo os resultados recuperados da sua última consulta:")
 
-        # Renderiza a tabela em HTML com visual escuro permanente
-        st.markdown(exibir_tabela_escura(df_exibir), unsafe_allow_html=True)
+        # Tabela nativa do Streamlit com busca/filtros ativados!
+        st.dataframe(df_exibir, use_container_width=True)
 
         csv_data = df_exibir.to_csv(index=False, sep=";", encoding="utf-8-sig")
 
@@ -375,7 +329,7 @@ st.write(
     "Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!"
 )
 
-FORMSPREE_ID = "mrenybwd"  # <--- LEMBRE-SE DE COLOCAR SEU ID DO FORMSPREE AQUI
+FORMSPREE_ID = "mrenybwd"
 FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
 
 with st.form(key="form_feedback_formspree", clear_on_submit=True):
