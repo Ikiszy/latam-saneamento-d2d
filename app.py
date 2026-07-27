@@ -28,18 +28,22 @@ logo_b64 = get_image_base64("latam_logo.png")
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
-# 2. Estilização CSS Anti-Modo Claro (Força Tema Escuro Permanente)
+# 2. Estilização CSS Totalmente Blindada (Força Dark Mode em Tudo)
 st.markdown(
     """
     <style>
-        /* Força fundo escuro geral e texto claro em qualquer modo do navegador */
-        html, body, [data-testid="stAppViewContainer"], .stApp {
+        /* Força o tema escuro em toda a árvore do HTML */
+        :root {
+            color-scheme: dark !important;
+        }
+
+        html, body, [data-testid="stAppViewContainer"], .stApp, [data-testid="stHeader"] {
             background-color: #0B101D !important;
             color: #F8FAFC !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
         }
 
-        /* Cor global de todos os textos informativos e títulos */
+        /* Textos e Labels */
         p, span, div, label, h1, h2, h3, h4, h5, h6, .stMarkdown {
             color: #F8FAFC !important;
         }
@@ -76,8 +80,8 @@ st.markdown(
             margin: 0 !important;
         }
 
-        /* Inputs e Caixas de Texto (Garante fundo escuro) */
-        .stTextArea textarea, .stTextInput input, .stSelectbox [data-baseweb="select"] {
+        /* Inputs, Textareas e Selectboxes */
+        .stTextArea textarea, .stTextInput input, div[data-baseweb="select"] > div {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
             -webkit-text-fill-color: #F8FAFC !important;
@@ -91,8 +95,14 @@ st.markdown(
             font-family: monospace !important;
         }
 
-        /* Botão Principal */
-        div.stButton > button {
+        /* Cor dos Menus Dropdown (Selectbox) no Modo Claro */
+        div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"], li[role="option"] {
+            background-color: #131B2E !important;
+            color: #F8FAFC !important;
+        }
+
+        /* Botão Principal e Botão de Download */
+        div.stButton > button, div.stDownloadButton > button {
             background: linear-gradient(135deg, #E2001A 0%, #B80015 100%) !important;
             color: #FFFFFF !important;
             font-weight: 600 !important;
@@ -106,8 +116,9 @@ st.markdown(
             transition: all 0.2s ease-in-out;
         }
         
-        div.stButton > button:hover {
+        div.stButton > button:hover, div.stDownloadButton > button:hover {
             background: linear-gradient(135deg, #FF1A35 0%, #D10018 100%) !important;
+            color: #FFFFFF !important;
             transform: translateY(-1px);
         }
 
@@ -130,19 +141,46 @@ st.markdown(
             padding-left: 14px;
         }
 
-        /* TABELA DE RESULTADOS (Força Fundo Escuro no Modo Claro) */
-        [data-testid="stDataFrame"], [data-testid="stTable"], .stDataFrame {
-            background-color: #131B2E !important;
-            border-radius: 10px !important;
-            border: 1px solid #1E293B !important;
+        /* TABELA CUSTOMIZADA E 100% ESCURA (Substitui o Dataframe nativo) */
+        .table-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 10px;
+            border: 1px solid #1E293B;
+            margin-bottom: 15px;
         }
 
-        /* Força a renderização interna do Glide Data Grid (usado pelo st.dataframe) */
-        div[data-testid="stDataFrame"] iframe {
-            filter: invert(0.9) hue-rotate(180deg) !important;
+        table.custom-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #131B2E;
+            color: #F8FAFC;
+            font-size: 13px;
+            text-align: left;
         }
 
-        /* Customização dos alertas do Streamlit */
+        table.custom-table th {
+            background-color: #182238;
+            color: #E2001A;
+            padding: 12px;
+            position: sticky;
+            top: 0;
+            border-bottom: 2px solid #2A364F;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        table.custom-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1E293B;
+            word-break: break-all;
+        }
+
+        table.custom-table tr:hover {
+            background-color: #1C2840;
+        }
+
+        /* Alertas do Streamlit */
         .stAlert {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
@@ -157,6 +195,24 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+
+# Função para desenhar a tabela escura sem depender do componente nativo do Streamlit
+def exibir_tabela_escura(df):
+    html = '<div class="table-container"><table class="custom-table"><thead><tr>'
+    for col in df.columns:
+        html += f"<th>{col}</th>"
+    html += "</tr></thead><tbody>"
+
+    for _, row in df.iterrows():
+        html += "<tr>"
+        for val in row:
+            html += f"<td>{val}</td>"
+        html += "</tr>"
+
+    html += "</tbody></table></div>"
+    return html
+
 
 # 3. BANNER PRINCIPAL
 logo_html = (
@@ -217,7 +273,7 @@ with col_esquerda:
 
     st.write(f"**Total de chaves identificadas:** `{len(chaves_lista)}`")
     btn_iniciar = st.button("INICIAR CONSULTA SITRAM")
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with col_direita:
     st.markdown('<div class="latam-card">', unsafe_allow_html=True)
@@ -248,7 +304,9 @@ with col_direita:
                     "Situação Imposto",
                     "Status Final",
                 ]
-                tabela_placeholder.dataframe(df_temp, use_container_width=True)
+                tabela_placeholder.markdown(
+                    exibir_tabela_escura(df_temp), unsafe_allow_html=True
+                )
 
             with st.spinner("Consultando dados na SEFAZ..."):
                 resultados = consultar_chaves_sitram(
@@ -281,7 +339,8 @@ with col_direita:
         if not btn_iniciar:
             st.info("📌 Exibindo os resultados recuperados da sua última consulta:")
 
-        st.dataframe(df_exibir, use_container_width=True)
+        # Renderiza a tabela em HTML com visual escuro permanente
+        st.markdown(exibir_tabela_escura(df_exibir), unsafe_allow_html=True)
 
         csv_data = df_exibir.to_csv(index=False, sep=";", encoding="utf-8-sig")
 
@@ -292,8 +351,10 @@ with col_direita:
             mime="text/csv",
         )
     elif not btn_iniciar:
-        st.info("Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**.")
-        
+        st.info(
+            "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
+        )
+
         st.markdown(
             """
             <div class="latam-quote">
@@ -303,23 +364,33 @@ with col_direita:
             unsafe_allow_html=True,
         )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- 5. SEÇÃO DE FEEDBACK (FORMSPREE) ---
 st.markdown("<br>", unsafe_allow_html=True)
 
 st.markdown('<div class="latam-card">', unsafe_allow_html=True)
 st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
-st.write("Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!")
+st.write(
+    "Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!"
+)
 
 FORMSPREE_ID = "mrenybwd"  # <--- LEMBRE-SE DE COLOCAR SEU ID DO FORMSPREE AQUI
 FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
 
 with st.form(key="form_feedback_formspree", clear_on_submit=True):
-    nome_usuario = st.text_input("Seu nome (opcional):", placeholder="Ex: João Silva")
-    tipo_mensagem = st.selectbox("O que você deseja reportar?", ["Erro / Bug no resultado", "Sugestão de melhoria", "Outro"])
-    mensagem = st.text_area("Descreva o erro ou sugestão em detalhes:", placeholder="Escreva aqui...")
-    
+    nome_usuario = st.text_input(
+        "Seu nome (opcional):", placeholder="Ex: João Silva"
+    )
+    tipo_mensagem = st.selectbox(
+        "O que você deseja reportar?",
+        ["Erro / Bug no resultado", "Sugestão de melhoria", "Outro"],
+    )
+    mensagem = st.text_area(
+        "Descreva o erro ou sugestão em detalhes:",
+        placeholder="Escreva aqui...",
+    )
+
     btn_enviar_feedback = st.form_submit_button("Enviar Feedback 🚀")
 
 if btn_enviar_feedback:
@@ -329,16 +400,20 @@ if btn_enviar_feedback:
         dados_envio = {
             "nome": nome_usuario or "Anônimo",
             "tipo": tipo_mensagem,
-            "mensagem": mensagem
+            "mensagem": mensagem,
         }
-        
+
         try:
             resposta = requests.post(FORMSPREE_URL, data=dados_envio)
             if resposta.status_code == 200:
-                st.success("Obrigado! Seu feedback foi enviado direto para o desenvolvedor.")
+                st.success(
+                    "Obrigado! Seu feedback foi enviado direto para o desenvolvedor."
+                )
             else:
-                st.error("Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
+                st.error(
+                    "Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree."
+                )
         except Exception as e:
             st.error(f"Erro ao conectar com o servidor: {e}")
 
-st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
