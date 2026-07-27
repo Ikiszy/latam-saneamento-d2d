@@ -28,65 +28,75 @@ logo_b64 = get_image_base64("latam_logo.png")
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
-# 2. Estilização CSS Corporativa LATAM
+# 2. Estilização CSS Moderna & Refinada (Roadmap Visual)
 st.markdown(
     """
     <style>
+        /* Fundo Geral - Cinza Escuro Sombrio (Não Preto Puro) */
         .stApp {
-            background-color: #0D192B !important;
-            color: #FFFFFF !important;
+            background-color: #0B101D !important;
+            color: #E2E8F0 !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
         }
 
+        /* Banner Topo Moderno e Espaçoso */
         .latam-banner {
-            background: linear-gradient(135deg, #1B0034 0%, #2A0052 100%);
-            padding: 35px 20px;
-            border-radius: 16px;
+            background: linear-gradient(135deg, #18002E 0%, #250046 100%);
+            padding: 30px 24px;
+            border-radius: 14px;
             text-align: center;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-            margin-bottom: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .latam-banner img {
-            max-width: 380px !important;
+            max-width: 320px !important;
             width: 100% !important;
             height: auto;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
+        /* Redução do Título Principal */
         .latam-banner h1 {
             color: #FFFFFF !important;
-            font-size: 38px !important;
-            font-weight: 800 !important;
-            margin: 5px 0 !important;
+            font-size: 28px !important;
+            font-weight: 700 !important;
+            margin: 8px 0 4px 0 !important;
+            letter-spacing: -0.5px;
         }
 
         .latam-banner p {
-            color: #D1D5DB !important;
-            font-size: 18px !important;
+            color: #94A3B8 !important;
+            font-size: 15px !important;
             margin: 0 !important;
         }
 
+        /* Hierarquia Tipográfica dos Subtítulos */
         .stMarkdown h2, .stMarkdown h3 {
-            color: #FFFFFF !important;
-            font-size: 22px !important;
-            font-weight: 700 !important;
+            color: #F8FAFC !important;
+            font-size: 18px !important;
+            font-weight: 600 !important;
+            margin-bottom: 16px !important;
+            letter-spacing: -0.3px;
         }
 
         label, .stRadio label, .stTextArea label, .stFileUploader label, .stTextInput label, .stSelectbox label {
-            color: #FFFFFF !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
+            color: #CBD5E1 !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
         }
 
+        /* Entrada de Dados - Inputs com mais 'Ar' */
         .stTextArea textarea, .stTextInput input {
-            background-color: #162235 !important;
-            color: #FFFFFF !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
-            border: 2px solid #334155 !important;
-            border-radius: 8px !important;
+            background-color: #131B2E !important;
+            color: #F8FAFC !important;
+            -webkit-text-fill-color: #F8FAFC !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            border: 1px solid #2A364F !important;
+            border-radius: 10px !important;
+            padding: 12px !important;
         }
 
         .stTextArea textarea {
@@ -95,59 +105,75 @@ st.markdown(
 
         .stTextArea textarea:focus, .stTextInput input:focus {
             border-color: #E2001A !important;
-            box-shadow: 0 0 0 1px #E2001A !important;
+            box-shadow: 0 0 0 2px rgba(226, 0, 26, 0.2) !important;
         }
 
+        /* Botão Moderno Arredondado com Destaque Sutil */
         div.stButton > button {
-            background-color: #E2001A !important;
+            background: linear-gradient(135deg, #E2001A 0%, #B80015 100%) !important;
             color: #FFFFFF !important;
-            font-weight: bold !important;
-            font-size: 18px !important;
-            height: 3.2em !important;
-            border-radius: 8px !important;
+            font-weight: 600 !important;
+            font-size: 15px !important;
+            height: 3em !important;
+            border-radius: 10px !important;
             border: none !important;
             width: 100% !important;
-            margin-top: 10px;
-            box-shadow: 0 4px 12px rgba(226, 0, 26, 0.3);
+            margin-top: 14px;
+            box-shadow: 0 4px 14px rgba(226, 0, 26, 0.35);
+            transition: all 0.2s ease-in-out;
         }
         
         div.stButton > button:hover {
-            background-color: #C10016 !important;
+            background: linear-gradient(135deg, #FF1A35 0%, #D10018 100%) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(226, 0, 26, 0.45);
         }
 
+        /* Containers e Cards com Bordas Arredondadas */
         .latam-card {
-            background-color: #162235;
-            border: 1px solid #23354E;
+            background-color: #131B2E;
+            border: 1px solid #1E293B;
             border-radius: 12px;
-            padding: 20px;
-            margin-top: 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 22px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
         }
 
         .latam-card-title {
             color: #E2001A;
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 10px;
             text-transform: uppercase;
             letter-spacing: 0.8px;
         }
 
         .latam-quote {
             font-style: italic;
-            color: #CBD5E1;
-            font-size: 15px;
-            line-height: 1.5;
+            color: #94A3B8;
+            font-size: 14px;
+            line-height: 1.6;
             border-left: 3px solid #E2001A;
-            padding-left: 12px;
-            margin-top: 10px;
+            padding-left: 14px;
+        }
+
+        /* Refinamento da Tabela (Sem linhas verticais e mais altura) */
+        [data-testid="stDataFrame"] {
+            background-color: #131B2E !important;
+            border-radius: 10px !important;
+            border: 1px solid #1E293B !important;
+            padding: 8px !important;
         }
 
         .stAlert {
-            background-color: #162235 !important;
-            color: #FFFFFF !important;
-            border: 1px solid #334155 !important;
-            border-radius: 8px !important;
+            background-color: #131B2E !important;
+            color: #F8FAFC !important;
+            border: 1px solid #1E293B !important;
+            border-radius: 10px !important;
+        }
+
+        hr {
+            border-color: #1E293B !important;
         }
     </style>
 """,
@@ -174,6 +200,7 @@ st.markdown(
 col_esquerda, col_direita = st.columns(2, gap="large")
 
 with col_esquerda:
+    st.markdown('<div class="latam-card">', unsafe_allow_html=True)
     st.subheader("1. Entrada de Dados")
 
     modo = st.radio(
@@ -187,7 +214,7 @@ with col_esquerda:
     if modo == "Digitar / Colar Chaves":
         texto_chaves = st.text_area(
             "Cole abaixo as chaves de acesso (uma por linha):",
-            height=250,
+            height=220,
             placeholder="3525041733098000127550030000000001\n3525041733098000127550030000000002",
         )
         if texto_chaves:
@@ -212,8 +239,10 @@ with col_esquerda:
 
     st.write(f"**Total de chaves identificadas:** `{len(chaves_lista)}`")
     btn_iniciar = st.button("INICIAR CONSULTA SITRAM")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with col_direita:
+    st.markdown('<div class="latam-card">', unsafe_allow_html=True)
     st.subheader("2. Painel de Acompanhamento")
 
     if btn_iniciar:
@@ -265,7 +294,6 @@ with col_direita:
         ]
     elif os.path.exists(CACHE_FILE) and not btn_iniciar:
         try:
-            # Força o pandas a ler todas as colunas como Texto puro (dtype=str)
             df_exibir = pd.read_csv(CACHE_FILE, sep=";", dtype=str)
             df_exibir = df_exibir.astype(str)
         except Exception:
@@ -275,7 +303,6 @@ with col_direita:
         if not btn_iniciar:
             st.info("📌 Exibindo os resultados recuperados da sua última consulta:")
 
-        # Garante que não haja conversões numéricas acidentais antes de mandar pro Streamlit
         st.dataframe(df_exibir, use_container_width=True)
 
         csv_data = df_exibir.to_csv(index=False, sep=";", encoding="utf-8-sig")
@@ -287,38 +314,23 @@ with col_direita:
             mime="text/csv",
         )
     elif not btn_iniciar:
-        st.info(
-            "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
-        )
-
+        st.info("Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**.")
+        
         st.markdown(
             """
-            <div class="latam-card">
-                <div class="latam-card-title">✈️ Nosso Propósito</div>
-                <div class="latam-quote">
-                    "Levar os sonhos ao seu destino com segurança, eficiência e agilidade — otimizando processos fiscais para impulsionar a operação LATAM Cargo."
-                </div>
+            <div class="latam-quote">
+                "Levar os sonhos ao seu destino com segurança, eficiência e agilidade — otimizando processos fiscais para impulsionar a operação LATAM Cargo."
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.markdown(
-            """
-            <div class="latam-card">
-                <div class="latam-card-title">💡 Dicas de Processamento D2D</div>
-                <ul style="color: #CBD5E1; font-size: 14px; margin-bottom: 0; padding-left: 20px;">
-                    <li>Você pode colar até centenas de chaves de uma só vez.</li>
-                    <li>O robô salva cada resultado em tempo real para evitar perdas se a tela fechar.</li>
-                    <li>Ao finalizar, o arquivo <b>.CSV</b> gerado pode ser aberto direto no Google Sheets.</li>
-                </ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 5. SEÇÃO DE FEEDBACK (FORMSPREE) ---
-st.markdown("<br><hr>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
+st.markdown('<div class="latam-card">', unsafe_allow_html=True)
 st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
 st.write("Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!")
 
@@ -350,3 +362,5 @@ if btn_enviar_feedback:
                 st.error("Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree.")
         except Exception as e:
             st.error(f"Erro ao conectar com o servidor: {e}")
+
+st.markdown('</div>', unsafe_allow_html=True)
