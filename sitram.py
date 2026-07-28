@@ -16,11 +16,14 @@ except Exception as e:
     print(f"Aviso de instalação do Playwright: {e}")
 
 
-def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
-    """Navega pelo menu do SITRAM e pesquisa as chaves informadas."""
+def consultar_chaves_sitram(lista_dados, callback_progresso=None):
+    """
+    Navega pelo menu do SITRAM e pesquisa as chaves informadas.
+    Consulta feita unicamente pela Chave de Acesso na SEFAZ.
+    """
     resultados = []
 
-    # Se já existir um arquivo temporário de uma busca anterior, limpa ele ao iniciar uma nova
+    # Se já existir um arquivo temporário de uma busca anterior, limpa ele
     if os.path.exists(CACHE_FILE):
         try:
             os.remove(CACHE_FILE)
@@ -54,26 +57,35 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
         except Exception as e:
             print(f"Erro na navegação inicial do menu: {e}")
 
-        total_chaves = len(lista_chaves)
+        total_itens = len(lista_dados)
 
-        for indice, chave in enumerate(lista_chaves, start=1):
-            chave = chave.strip()
-            if not chave:
+        for indice, item in enumerate(lista_dados, start=1):
+            # Extrai AWB e Chave do objeto
+            if isinstance(item, dict):
+                awb_val = item.get("awb", "N/A").strip()
+                chave_val = item.get("chave", "").strip()
+            else:
+                awb_val = "N/A"
+                chave_val = str(item).strip()
+
+            if not chave_val:
                 continue
 
             resultado_item = {
-                "acao_fiscal": chave,
+                "awb": awb_val if awb_val else "N/A",
+                "acao_fiscal": chave_val,
                 "nota": "",
                 "imposto": "Não Encontrado",
                 "situacao": "PENDENTE",
             }
 
             try:
+                # DIGITA APENAS A CHAVE DE ACESSO NO SITRAM
                 campo = page.get_by_role("textbox")
                 campo.click()
                 page.keyboard.press("Control+A")
                 page.keyboard.press("Backspace")
-                campo.fill(chave)
+                campo.fill(chave_val)
 
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
@@ -83,7 +95,7 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
 
                 time.sleep(1.5)
 
-                # FIX: .first evita o erro de strict mode quando o SITRAM retorna múltiplos elementos/linhas
+                # .first evita o erro de strict mode quando o SITRAM retorna múltiplos elementos/linhas
                 status_texto = page.locator(seletor_celula).first.inner_text()
 
                 match_nota = re.search(
@@ -150,10 +162,11 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
 
             resultados.append(resultado_item)
 
-            # SALVAMENTO EM TEMPO REAL: Escreve no disco item por item
+            # SALVAMENTO EM TEMPO REAL
             try:
                 df_parcial = pd.DataFrame(resultados)
                 df_parcial.columns = [
+                    "AWB",
                     "Chave / Ação Fiscal",
                     "Nota Fiscal",
                     "Situação Imposto",
@@ -167,7 +180,7 @@ def consultar_chaves_sitram(lista_chaves, callback_progresso=None):
 
             if callback_progresso:
                 callback_progresso(
-                    atual=indice, total=total_chaves, item=resultado_item
+                    atual=indice, total=total_itens, item=resultado_item
                 )
 
             time.sleep(6.0)
