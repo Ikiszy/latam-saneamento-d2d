@@ -5,20 +5,16 @@ import requests
 import streamlit as st
 from sitram import consultar_chaves_sitram
 
-CACHE_FILE = "resultados_cache.csv"
-
-# 1. Configuração da página
+# 1. Configuração da página Streamlit
 st.set_page_config(
     page_title="LATAM Cargo | Saneamento D2D",
     page_icon="✈️",
     layout="wide",
-    menu_items={
-        "About": "Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo"
-    },
 )
 
 
-def get_image_base64(path):
+# Função auxiliar para converter imagem local para Base64 (para HTML/CSS)
+def get_image_base64(path: str) -> str:
     if os.path.exists(path):
         with open(path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode()
@@ -27,200 +23,196 @@ def get_image_base64(path):
 
 logo_b64 = get_image_base64("latam_logo.png")
 
-if "resultados_finais" not in st.session_state:
-    st.session_state["resultados_finais"] = None
-
-# 2. Estilização CSS
+# 2. Estilização CSS Personalizada (Tema Escuro / LATAM)
 st.markdown(
     """
     <style>
-        html, body, [data-testid="stAppViewContainer"], .stApp, [data-testid="stHeader"] {
-            background-color: #0B101D !important;
-            color: #F8FAFC !important;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        /* Fundo Geral - Azul Marinho LATAM */
+        .stApp {
+            background-color: #0D192B !important;
+            color: #FFFFFF !important;
         }
 
-        p, span, div, label, h1, h2, h3, h4, h5, h6, .stMarkdown {
-            color: #F8FAFC !important;
-        }
-
-        .latam-banner-center {
-            background: linear-gradient(135deg, #18002E 0%, #250046 100%);
-            padding: 22px 20px 18px 20px;
-            border-radius: 14px;
+        /* Banner Principal no Topo */
+        .latam-banner {
+            background: linear-gradient(135deg, #1B0034 0%, #2A0052 100%);
+            padding: 35px 20px;
+            border-radius: 16px;
             text-align: center;
-            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
             margin-bottom: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .latam-banner-center img {
-            max-width: 260px !important;
+        .latam-banner img {
+            max-width: 380px !important;
             width: 100% !important;
             height: auto;
-            margin-bottom: 6px;
-            display: inline-block;
+            margin-bottom: 15px;
         }
 
-        .latam-banner-center h1 {
+        .latam-banner h1 {
             color: #FFFFFF !important;
-            font-size: 26px !important;
-            font-weight: 700 !important;
-            margin: 2px 0 2px 0 !important;
-            letter-spacing: -0.4px;
-            line-height: 1.2;
+            font-size: 38px !important;
+            font-weight: 800 !important;
+            margin: 5px 0 !important;
         }
 
-        .latam-banner-center p {
-            color: #94A3B8 !important;
-            font-size: 14px !important;
+        .latam-banner p {
+            color: #D1D5DB !important;
+            font-size: 18px !important;
             margin: 0 !important;
         }
 
+        /* Títulos e Tipografia */
+        .stMarkdown h2, .stMarkdown h3 {
+            color: #FFFFFF !important;
+            font-size: 22px !important;
+            font-weight: 700 !important;
+        }
+
+        label, .stRadio label, .stTextArea label, .stFileUploader label, .stTextInput label, .stSelectbox label {
+            color: #FFFFFF !important;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+        }
+
+        /* Campos de Entrada (Inputs e Textarea) */
         .stTextArea textarea, .stTextInput input {
-            background-color: #131B2E !important;
-            color: #F8FAFC !important;
-            -webkit-text-fill-color: #F8FAFC !important;
-            font-size: 14px !important;
-            border: 1px solid #2A364F !important;
-            border-radius: 10px !important;
+            background-color: #162235 !important;
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            border: 2px solid #334155 !important;
+            border-radius: 8px !important;
         }
 
         .stTextArea textarea {
             font-family: monospace !important;
         }
 
-        div[data-baseweb="select"] > div {
-            background-color: #131B2E !important;
-            color: #F8FAFC !important;
-            border: 1px solid #2A364F !important;
-            border-radius: 10px !important;
+        .stTextArea textarea:focus, .stTextInput input:focus {
+            border-color: #E2001A !important;
+            box-shadow: 0 0 0 1px #E2001A !important;
         }
 
-        div[data-baseweb="select"] span {
-            color: #F8FAFC !important;
-        }
-
-        div.stButton > button, div.stDownloadButton > button, div[data-testid="stFormSubmitButton"] > button {
-            background: linear-gradient(135deg, #E2001A 0%, #B80015 100%) !important;
+        /* Botão Vermelho LATAM */
+        div.stButton > button {
+            background-color: #E2001A !important;
             color: #FFFFFF !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-            font-weight: 600 !important;
-            font-size: 15px !important;
-            border-radius: 10px !important;
+            font-weight: bold !important;
+            font-size: 18px !important;
+            height: 3.2em !important;
+            border-radius: 8px !important;
             border: none !important;
             width: 100% !important;
-            box-shadow: 0 4px 14px rgba(226, 0, 26, 0.35) !important;
-            transition: all 0.2s ease-in-out !important;
+            margin-top: 10px;
+            box-shadow: 0 4px 12px rgba(226, 0, 26, 0.3);
         }
         
-        div.stButton > button:hover, div.stDownloadButton > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
-            background: linear-gradient(135deg, #FF1A35 0%, #D10018 100%) !important;
-            color: #FFFFFF !important;
-            transform: translateY(-1px);
+        div.stButton > button:hover {
+            background-color: #C10016 !important;
         }
 
+        /* Cards Informativos */
         .latam-card {
-            background-color: #131B2E !important;
-            border: 1px solid #1E293B !important;
+            background-color: #162235;
+            border: 1px solid #23354E;
             border-radius: 12px;
-            padding: 22px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+            padding: 20px;
+            margin-top: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .latam-card-title {
+            color: #E2001A;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
         }
 
         .latam-quote {
             font-style: italic;
-            color: #94A3B8 !important;
-            font-size: 14px;
-            line-height: 1.6;
+            color: #CBD5E1;
+            font-size: 15px;
+            line-height: 1.5;
             border-left: 3px solid #E2001A;
-            padding-left: 14px;
+            padding-left: 12px;
+            margin-top: 10px;
         }
 
-        [data-testid="stDataFrame"] {
-            background-color: #131B2E !important;
-            border-radius: 10px;
-            border: 1px solid #2A364F;
-        }
-
-        @media (prefers-color-scheme: light) {
-            [data-testid="stDataFrame"] canvas {
-                filter: invert(0.92) hue-rotate(180deg) !important;
-            }
-        }
-
+        /* Avisos e Alertas */
         .stAlert {
-            background-color: #131B2E !important;
-            color: #F8FAFC !important;
-            border: 1px solid #1E293B !important;
-            border-radius: 10px !important;
-        }
-        
-        .stAlert p {
-            color: #F8FAFC !important;
+            background-color: #162235 !important;
+            color: #FFFFFF !important;
+            border: 1px solid #334155 !important;
+            border-radius: 8px !important;
         }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# 3. HEADER
-logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" alt="Logo LATAM Cargo"><br>'
-    if logo_b64
-    else ""
-)
+# 3. Cabeçalho / Banner Principal
+logo_html = f'<img src="data:image/png;base64,{logo_b64}"><br>' if logo_b64 else ""
 
 st.markdown(
     f"""
-    <main class="latam-banner-center">
+    <div class="latam-banner">
         {logo_html}
         <h1>Assistente de Saneamento D2D</h1>
         <p>Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo</p>
-    </main>
+    </div>
 """,
     unsafe_allow_html=True,
 )
 
-# 4. CONTEÚDO PRINCIPAL
+# 4. Layout Principal em 2 Colunas
 col_esquerda, col_direita = st.columns(2, gap="large")
 
 with col_esquerda:
-    st.markdown('<div class="latam-card">', unsafe_allow_html=True)
-    st.header("1. Entrada de Dados")
+    st.subheader("1. Entrada de Dados")
 
     modo = st.radio(
-        "Como você deseja importar as chaves/AWBs?",
+        "Como você deseja importar as chaves?",
         ["Digitar / Colar Dados", "Carregar Arquivo (TXT / Excel)"],
         horizontal=True,
     )
 
-    lista_dados = []
+    dados_para_consulta = []  # Estrutura: [{'awb': '...', 'chave': '...'}, ...]
 
     if modo == "Digitar / Colar Dados":
-        texto_dados = st.text_area(
-            "Cole abaixo os dados (Formato recomendável: AWB;CHAVE ou apenas a CHAVE):",
-            height=220,
-            placeholder="045-12345678;3525041733098000127550030000000001\n045-87654321;3525041733098000127550030000000002\n3525041733098000127550030000000003",
+        texto_chaves = st.text_area(
+            "Cole abaixo (apenas Chaves OU formato 'AWB Chave', um por linha):",
+            height=250,
+            placeholder="32405235  3525041733098000127550030000000001\n32475605  3525041733098000127550030000000002",
         )
-        if texto_dados:
-            for linha in texto_dados.split("\n"):
-                linha_clean = linha.strip()
-                if not linha_clean:
+        if texto_chaves:
+            for linha in texto_chaves.split("\n"):
+                linha_limpa = linha.strip()
+                if not linha_limpa:
                     continue
-                if ";" in linha_clean:
-                    partes = linha_clean.split(";")
-                    lista_dados.append(
-                        {"awb": partes[0].strip(), "chave": partes[1].strip()}
+
+                # Separa por tabulação, pipe ou múltiplos espaços
+                partes = [
+                    p.strip()
+                    for p in linha_limpa.replace("\t", " ")
+                    .replace("|", " ")
+                    .split()
+                    if p.strip()
+                ]
+
+                if len(partes) >= 2:
+                    dados_para_consulta.append(
+                        {"awb": partes[0], "chave": partes[1]}
                     )
-                elif "\t" in linha_clean:
-                    partes = linha_clean.split("\t")
-                    lista_dados.append(
-                        {"awb": partes[0].strip(), "chave": partes[1].strip()}
+                elif len(partes) == 1:
+                    dados_para_consulta.append(
+                        {"awb": "N/A", "chave": partes[0]}
                     )
-                else:
-                    lista_dados.append({"awb": "N/A", "chave": linha_clean})
 
     else:
         arquivo = st.file_uploader(
@@ -229,52 +221,64 @@ with col_esquerda:
         )
         if arquivo:
             if arquivo.name.endswith(".txt"):
-                for linha in arquivo.readlines():
-                    linha_clean = linha.decode("utf-8").strip()
-                    if not linha_clean:
-                        continue
-                    if ";" in linha_clean:
-                        partes = linha_clean.split(";")
-                        lista_dados.append(
-                            {
-                                "awb": partes[0].strip(),
-                                "chave": partes[1].strip(),
-                            }
+                linhas = [
+                    l.decode("utf-8").strip()
+                    for l in arquivo.readlines()
+                    if l.decode("utf-8").strip()
+                ]
+                for l in linhas:
+                    partes = [
+                        p.strip()
+                        for p in l.replace("\t", " ").replace("|", " ").split()
+                        if p.strip()
+                    ]
+                    if len(partes) >= 2:
+                        dados_para_consulta.append(
+                            {"awb": partes[0], "chave": partes[1]}
                         )
-                    else:
-                        lista_dados.append({"awb": "N/A", "chave": linha_clean})
+                    elif len(partes) == 1:
+                        dados_para_consulta.append(
+                            {"awb": "N/A", "chave": partes[0]}
+                        )
             else:
-                if arquivo.name.endswith(".csv"):
-                    df_upload = pd.read_csv(arquivo, dtype=str, sep=None, engine="python")
-                else:
-                    df_upload = pd.read_excel(arquivo, dtype=str)
-
+                df_upload = (
+                    pd.read_csv(arquivo)
+                    if arquivo.name.endswith(".csv")
+                    else pd.read_excel(arquivo)
+                )
                 if df_upload.shape[1] >= 2:
+                    # Assume Coluna 1 = AWB, Coluna 2 = Chave
                     for _, row in df_upload.iterrows():
-                        lista_dados.append(
+                        dados_para_consulta.append(
                             {
                                 "awb": str(row.iloc[0]).strip(),
                                 "chave": str(row.iloc[1]).strip(),
                             }
                         )
                 else:
+                    # Apenas 1 coluna -> considera como Chave
                     for _, row in df_upload.iterrows():
-                        lista_dados.append(
-                            {"awb": "N/A", "chave": str(row.iloc[0]).strip()}
+                        dados_para_consulta.append(
+                            {
+                                "awb": "N/A",
+                                "chave": str(row.iloc[0]).strip(),
+                            }
                         )
 
-    st.write(f"**Total de itens identificados:** `{len(lista_dados)}`")
+    st.write(
+        f"**Total de registros identificados:** `{len(dados_para_consulta)}`"
+    )
     btn_iniciar = st.button("INICIAR CONSULTA SITRAM")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with col_direita:
-    st.markdown('<div class="latam-card">', unsafe_allow_html=True)
-    st.header("2. Painel de Acompanhamento")
+    st.subheader("2. Painel de Acompanhamento")
 
     if btn_iniciar:
-        if not lista_dados:
-            st.warning("Insira ao menos um registro para iniciar a consulta.")
+        if not dados_para_consulta:
+            st.warning("Insira ao menos uma chave de acesso para iniciar.")
         else:
+            chaves_somente = [item["chave"] for item in dados_para_consulta]
+
             bar_progresso = st.progress(0)
             status_texto = st.empty()
             tabela_placeholder = st.empty()
@@ -285,101 +289,103 @@ with col_direita:
                 percent = int((atual / total) * 100)
                 bar_progresso.progress(percent)
                 status_texto.text(
-                    f"Processando: {atual} de {total} | AWB: {item['awb']} | Chave: {item['acao_fiscal']}"
+                    f"Processando: {atual} de {total} | Ação Fiscal: {item['acao_fiscal']}"
                 )
-                resultados_em_tempo_real.append(item)
 
-                df_temp = pd.DataFrame(resultados_em_tempo_real).astype(str)
-                df_temp.columns = [
-                    "AWB",
-                    "Chave / Ação Fiscal",
-                    "Nota Fiscal",
-                    "Situação Imposto",
-                    "Status Final",
-                ]
-                tabela_placeholder.dataframe(df_temp, use_container_width=True)
+                # Associa a AWB do item correspondente
+                awb_correspondente = (
+                    dados_para_consulta[atual - 1]["awb"]
+                    if atual <= len(dados_para_consulta)
+                    else "N/A"
+                )
+
+                item_com_awb = {
+                    "AWB / Minuta": awb_correspondente,
+                    "Chave / Ação Fiscal": item["acao_fiscal"],
+                    "Nota Fiscal": item["nota"],
+                    "Situação Imposto": item["imposto"],
+                    "Status Final": item["situacao"],
+                }
+
+                resultados_em_tempo_real.append(item_com_awb)
+
+                df_temp = pd.DataFrame(resultados_em_tempo_real)
+                tabela_placeholder.dataframe(
+                    df_temp, use_container_width=True
+                )
 
             with st.spinner("Consultando dados na SEFAZ..."):
-                resultados = consultar_chaves_sitram(
-                    lista_dados, callback_progresso=atualizar_interface
+                consultar_chaves_sitram(
+                    chaves_somente, callback_progresso=atualizar_interface
                 )
 
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
-            st.session_state["resultados_finais"] = resultados
 
-    # Exibição dos resultados e resgate de cache
-    df_exibir = None
+            # Gerar CSV exportável para Google Sheets ou Excel
+            df_final = pd.DataFrame(resultados_em_tempo_real)
+            csv_data = df_final.to_csv(
+                index=False, sep=";", encoding="utf-8-sig"
+            )
 
-    if st.session_state["resultados_finais"] is not None:
-        df_exibir = pd.DataFrame(st.session_state["resultados_finais"]).astype(str)
-        df_exibir.columns = [
-            "AWB",
-            "Chave / Ação Fiscal",
-            "Nota Fiscal",
-            "Situação Imposto",
-            "Status Final",
-        ]
-    elif os.path.exists(CACHE_FILE) and not btn_iniciar:
-        try:
-            df_exibir = pd.read_csv(CACHE_FILE, sep=";", dtype=str)
-            df_exibir = df_exibir.astype(str)
-        except Exception:
-            df_exibir = None
-
-    if df_exibir is not None:
-        if not btn_iniciar:
-            st.info("📌 Exibindo os resultados recuperados da sua última consulta:")
-
-        st.dataframe(df_exibir, use_container_width=True)
-
-        csv_data = df_exibir.to_csv(index=False, sep=";", encoding="utf-8-sig")
-
-        st.download_button(
-            label="📥 Baixar Planilha para Google Sheets (.csv)",
-            data=csv_data,
-            file_name="Relatorio_Saneamento_LATAM.csv",
-            mime="text/csv",
-        )
-    elif not btn_iniciar:
+            st.download_button(
+                label="📥 Baixar Planilha (.csv)",
+                data=csv_data,
+                file_name="Relatorio_Saneamento_LATAM.csv",
+                mime="text/csv",
+            )
+    else:
         st.info(
-            "Aguardando início. Insira os dados ao lado e clique em **INICIAR CONSULTA SITRAM**."
+            "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
         )
 
+        # Card 1: Mensagem de Visão Corporativa
         st.markdown(
             """
-            <div class="latam-quote">
-                "Levar os sonhos ao seu destino com segurança, eficiência e agilidade — otimizando processos fiscais para impulsionar a operação LATAM Cargo."
+            <div class="latam-card">
+                <div class="latam-card-title">✈️ Nosso Propósito</div>
+                <div class="latam-quote">
+                    "Levar os sonhos ao seu destino com segurança, eficiência e agilidade — otimizando processos fiscais para impulsionar a operação LATAM Cargo."
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        # Card 2: Dicas Operacionais
+        st.markdown(
+            """
+            <div class="latam-card">
+                <div class="latam-card-title">💡 Dicas de Processamento D2D</div>
+                <ul style="color: #CBD5E1; font-size: 14px; margin-bottom: 0; padding-left: 20px;">
+                    <li>Você pode colar <b>AWB + Chave</b> juntas (copiando 2 colunas da sua planilha).</li>
+                    <li>O relatório final sai com a AWB já vinculada a cada resultado!</li>
+                    <li>Ao finalizar, o arquivo <b>.CSV</b> gerado pode ser aberto direto no Google Sheets.</li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-# 5. SEÇÃO DE FEEDBACK
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown('<div class="latam-card">', unsafe_allow_html=True)
-st.header("💬 Central de Erros, Dúvidas ou Sugestões")
+# --- 5. Central de Feedback (Formspree) ---
+st.markdown("<br><hr>", unsafe_allow_html=True)
+st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
 st.write(
     "Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!"
 )
 
+# Substitua pelo ID gerado no Formspree (exemplo: "xpzwkoby")
 FORMSPREE_ID = "mrenybwd"
 FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
 
 with st.form(key="form_feedback_formspree", clear_on_submit=True):
-    nome_usuario = st.text_input(
-        "Seu nome (opcional):", placeholder="Ex: João Silva"
-    )
+    nome_usuario = st.text_input("Seu nome (opcional):", placeholder="Ex: João Silva")
     tipo_mensagem = st.selectbox(
         "O que você deseja reportar?",
         ["Erro / Bug no resultado", "Sugestão de melhoria", "Outro"],
     )
     mensagem = st.text_area(
-        "Descreva o erro ou sugestão em detalhes:",
-        placeholder="Escreva aqui...",
+        "Descreva o erro ou sugestão em detalhes:", placeholder="Escreva aqui..."
     )
 
     btn_enviar_feedback = st.form_submit_button("Enviar Feedback 🚀")
@@ -402,9 +408,7 @@ if btn_enviar_feedback:
                 )
             else:
                 st.error(
-                    "Não foi possível enviar o feedback. Verifique se inseriu o ID correto do Formspree."
+                    "Não foi possível enviar o feedback. Verifique se configurou o ID do Formspree."
                 )
         except Exception as e:
             st.error(f"Erro ao conectar com o servidor: {e}")
-
-st.markdown("</div>", unsafe_allow_html=True)
