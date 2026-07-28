@@ -7,11 +7,14 @@ from sitram import consultar_chaves_sitram
 
 CACHE_FILE = "resultados_cache.csv"
 
-# 1. Configuração da página
+# 1. Configuração da página (com informações de About para melhorar o SEO)
 st.set_page_config(
     page_title="LATAM Cargo | Saneamento D2D",
     page_icon="✈️",
     layout="wide",
+    menu_items={
+        "About": "Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo"
+    },
 )
 
 
@@ -46,7 +49,7 @@ st.markdown(
         /* BANNER CENTRALIZADO COMPACTO */
         .latam-banner-center {
             background: linear-gradient(135deg, #18002E 0%, #250046 100%);
-            padding: 22px 20px 18px 20px; /* Padding menor em cima/baixo para aproximar tudo */
+            padding: 22px 20px 18px 20px;
             border-radius: 14px;
             text-align: center;
             box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
@@ -55,10 +58,10 @@ st.markdown(
         }
 
         .latam-banner-center img {
-            max-width: 260px !important; /* Logo AUMENTADA */
+            max-width: 260px !important;
             width: 100% !important;
             height: auto;
-            margin-bottom: 6px; /* Bem mais perto do nome */
+            margin-bottom: 6px;
             display: inline-block;
         }
 
@@ -66,7 +69,7 @@ st.markdown(
             color: #FFFFFF !important;
             font-size: 26px !important;
             font-weight: 700 !important;
-            margin: 2px 0 2px 0 !important; /* Nome subiu bem mais perto */
+            margin: 2px 0 2px 0 !important;
             letter-spacing: -0.4px;
             line-height: 1.2;
         }
@@ -171,18 +174,20 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 3. HEADER CENTRALIZADO (LOGO MAIOR + TEXTO PERTO)
+# 3. HEADER COM TAG <main> E ATRIBUTO ALT NA IMAGEM (Corrigido para Acessibilidade)
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}"><br>' if logo_b64 else ""
+    f'<img src="data:image/png;base64,{logo_b64}" alt="Logo LATAM Cargo"><br>'
+    if logo_b64
+    else ""
 )
 
 st.markdown(
     f"""
-    <div class="latam-banner-center">
+    <main class="latam-banner-center">
         {logo_html}
         <h1>Assistente de Saneamento D2D</h1>
         <p>Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo</p>
-    </div>
+    </main>
 """,
     unsafe_allow_html=True,
 )
@@ -192,7 +197,7 @@ col_esquerda, col_direita = st.columns(2, gap="large")
 
 with col_esquerda:
     st.markdown('<div class="latam-card">', unsafe_allow_html=True)
-    st.subheader("1. Entrada de Dados")
+    st.header("1. Entrada de Dados")
 
     modo = st.radio(
         "Como você deseja importar as chaves?",
@@ -234,7 +239,7 @@ with col_esquerda:
 
 with col_direita:
     st.markdown('<div class="latam-card">', unsafe_allow_html=True)
-    st.subheader("2. Painel de Acompanhamento")
+    st.header("2. Painel de Acompanhamento")
 
     if btn_iniciar:
         if not chaves_lista:
@@ -324,7 +329,7 @@ with col_direita:
 st.markdown("<br>", unsafe_allow_html=True)
 
 st.markdown('<div class="latam-card">', unsafe_allow_html=True)
-st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
+st.header("💬 Central de Erros, Dúvidas ou Sugestões")
 st.write(
     "Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!"
 )
