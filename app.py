@@ -7,7 +7,7 @@ from sitram import consultar_chaves_sitram
 
 CACHE_FILE = "resultados_cache.csv"
 
-# 1. Configuração da página (com informações de About para melhorar o SEO)
+# 1. Configuração da página
 st.set_page_config(
     page_title="LATAM Cargo | Saneamento D2D",
     page_icon="✈️",
@@ -18,7 +18,6 @@ st.set_page_config(
 )
 
 
-# Converter imagem para base64
 def get_image_base64(path):
     if os.path.exists(path):
         with open(path, "rb") as image_file:
@@ -31,11 +30,10 @@ logo_b64 = get_image_base64("latam_logo.png")
 if "resultados_finais" not in st.session_state:
     st.session_state["resultados_finais"] = None
 
-# 2. Estilização CSS (Centralizado, Logo Maior, Espaçamento Justo)
+# 2. Estilização CSS
 st.markdown(
     """
     <style>
-        /* Força fundo escuro geral e texto claro */
         html, body, [data-testid="stAppViewContainer"], .stApp, [data-testid="stHeader"] {
             background-color: #0B101D !important;
             color: #F8FAFC !important;
@@ -46,7 +44,6 @@ st.markdown(
             color: #F8FAFC !important;
         }
 
-        /* BANNER CENTRALIZADO COMPACTO */
         .latam-banner-center {
             background: linear-gradient(135deg, #18002E 0%, #250046 100%);
             padding: 22px 20px 18px 20px;
@@ -80,7 +77,6 @@ st.markdown(
             margin: 0 !important;
         }
 
-        /* Inputs e Textareas */
         .stTextArea textarea, .stTextInput input {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
@@ -94,7 +90,6 @@ st.markdown(
             font-family: monospace !important;
         }
 
-        /* Selectbox */
         div[data-baseweb="select"] > div {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
@@ -106,7 +101,6 @@ st.markdown(
             color: #F8FAFC !important;
         }
 
-        /* Botões */
         div.stButton > button, div.stDownloadButton > button, div[data-testid="stFormSubmitButton"] > button {
             background: linear-gradient(135deg, #E2001A 0%, #B80015 100%) !important;
             color: #FFFFFF !important;
@@ -126,7 +120,6 @@ st.markdown(
             transform: translateY(-1px);
         }
 
-        /* Cards Containers */
         .latam-card {
             background-color: #131B2E !important;
             border: 1px solid #1E293B !important;
@@ -145,7 +138,6 @@ st.markdown(
             padding-left: 14px;
         }
 
-        /* DataFrame FIX */
         [data-testid="stDataFrame"] {
             background-color: #131B2E !important;
             border-radius: 10px;
@@ -158,7 +150,6 @@ st.markdown(
             }
         }
 
-        /* Alertas */
         .stAlert {
             background-color: #131B2E !important;
             color: #F8FAFC !important;
@@ -174,7 +165,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 3. HEADER COM TAG <main> E ATRIBUTO ALT NA IMAGEM (Corrigido para Acessibilidade)
+# 3. HEADER
 logo_html = (
     f'<img src="data:image/png;base64,{logo_b64}" alt="Logo LATAM Cargo"><br>'
     if logo_b64
@@ -192,7 +183,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 4. CONTEÚDO PRINCIPAL (2 COLUNAS)
+# 4. CONTEÚDO PRINCIPAL
 col_esquerda, col_direita = st.columns(2, gap="large")
 
 with col_esquerda:
@@ -200,40 +191,79 @@ with col_esquerda:
     st.header("1. Entrada de Dados")
 
     modo = st.radio(
-        "Como você deseja importar as chaves?",
-        ["Digitar / Colar Chaves", "Carregar Arquivo (TXT / Excel)"],
+        "Como você deseja importar as chaves/AWBs?",
+        ["Digitar / Colar Dados", "Carregar Arquivo (TXT / Excel)"],
         horizontal=True,
     )
 
-    chaves_lista = []
+    lista_dados = []
 
-    if modo == "Digitar / Colar Chaves":
-        texto_chaves = st.text_area(
-            "Cole abaixo as chaves de acesso (uma por linha):",
+    if modo == "Digitar / Colar Dados":
+        texto_dados = st.text_area(
+            "Cole abaixo os dados (Formato recomendável: AWB;CHAVE ou apenas a CHAVE):",
             height=220,
-            placeholder="3525041733098000127550030000000001\n3525041733098000127550030000000002",
+            placeholder="045-12345678;3525041733098000127550030000000001\n045-87654321;3525041733098000127550030000000002\n3525041733098000127550030000000003",
         )
-        if texto_chaves:
-            chaves_lista = [
-                c.strip() for c in texto_chaves.split("\n") if c.strip()
-            ]
+        if texto_dados:
+            for linha in texto_dados.split("\n"):
+                linha_clean = linha.strip()
+                if not linha_clean:
+                    continue
+                if ";" in linha_clean:
+                    partes = linha_clean.split(";")
+                    lista_dados.append(
+                        {"awb": partes[0].strip(), "chave": partes[1].strip()}
+                    )
+                elif "\t" in linha_clean:
+                    partes = linha_clean.split("\t")
+                    lista_dados.append(
+                        {"awb": partes[0].strip(), "chave": partes[1].strip()}
+                    )
+                else:
+                    lista_dados.append({"awb": "N/A", "chave": linha_clean})
+
     else:
         arquivo = st.file_uploader(
-            "Selecione um arquivo de texto (.txt) ou planilha (.xlsx):",
+            "Selecione um arquivo de texto (.txt) ou planilha (.xlsx / .csv):",
             type=["txt", "xlsx", "csv"],
         )
         if arquivo:
             if arquivo.name.endswith(".txt"):
-                chaves_lista = [
-                    linha.decode("utf-8").strip()
-                    for linha in arquivo.readlines()
-                    if linha.decode("utf-8").strip()
-                ]
+                for linha in arquivo.readlines():
+                    linha_clean = linha.decode("utf-8").strip()
+                    if not linha_clean:
+                        continue
+                    if ";" in linha_clean:
+                        partes = linha_clean.split(";")
+                        lista_dados.append(
+                            {
+                                "awb": partes[0].strip(),
+                                "chave": partes[1].strip(),
+                            }
+                        )
+                    else:
+                        lista_dados.append({"awb": "N/A", "chave": linha_clean})
             else:
-                df_upload = pd.read_excel(arquivo, dtype=str)
-                chaves_lista = df_upload.iloc[:, 0].astype(str).tolist()
+                if arquivo.name.endswith(".csv"):
+                    df_upload = pd.read_csv(arquivo, dtype=str, sep=None, engine="python")
+                else:
+                    df_upload = pd.read_excel(arquivo, dtype=str)
 
-    st.write(f"**Total de chaves identificadas:** `{len(chaves_lista)}`")
+                if df_upload.shape[1] >= 2:
+                    for _, row in df_upload.iterrows():
+                        lista_dados.append(
+                            {
+                                "awb": str(row.iloc[0]).strip(),
+                                "chave": str(row.iloc[1]).strip(),
+                            }
+                        )
+                else:
+                    for _, row in df_upload.iterrows():
+                        lista_dados.append(
+                            {"awb": "N/A", "chave": str(row.iloc[0]).strip()}
+                        )
+
+    st.write(f"**Total de itens identificados:** `{len(lista_dados)}`")
     btn_iniciar = st.button("INICIAR CONSULTA SITRAM")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -242,8 +272,8 @@ with col_direita:
     st.header("2. Painel de Acompanhamento")
 
     if btn_iniciar:
-        if not chaves_lista:
-            st.warning("Insira ao menos uma chave de acesso para iniciar.")
+        if not lista_dados:
+            st.warning("Insira ao menos um registro para iniciar a consulta.")
         else:
             bar_progresso = st.progress(0)
             status_texto = st.empty()
@@ -255,12 +285,13 @@ with col_direita:
                 percent = int((atual / total) * 100)
                 bar_progresso.progress(percent)
                 status_texto.text(
-                    f"Processando: {atual} de {total} | Chave: {item['acao_fiscal']}"
+                    f"Processando: {atual} de {total} | AWB: {item['awb']} | Chave: {item['acao_fiscal']}"
                 )
                 resultados_em_tempo_real.append(item)
 
                 df_temp = pd.DataFrame(resultados_em_tempo_real).astype(str)
                 df_temp.columns = [
+                    "AWB",
                     "Chave / Ação Fiscal",
                     "Nota Fiscal",
                     "Situação Imposto",
@@ -270,19 +301,20 @@ with col_direita:
 
             with st.spinner("Consultando dados na SEFAZ..."):
                 resultados = consultar_chaves_sitram(
-                    chaves_lista, callback_progresso=atualizar_interface
+                    lista_dados, callback_progresso=atualizar_interface
                 )
 
             status_texto.empty()
             st.success("Consulta finalizada com sucesso!")
             st.session_state["resultados_finais"] = resultados
 
-    # Lógica de exibição e resgate do backup
+    # Exibição dos resultados e resgate de cache
     df_exibir = None
 
     if st.session_state["resultados_finais"] is not None:
         df_exibir = pd.DataFrame(st.session_state["resultados_finais"]).astype(str)
         df_exibir.columns = [
+            "AWB",
             "Chave / Ação Fiscal",
             "Nota Fiscal",
             "Situação Imposto",
@@ -311,7 +343,7 @@ with col_direita:
         )
     elif not btn_iniciar:
         st.info(
-            "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
+            "Aguardando início. Insira os dados ao lado e clique em **INICIAR CONSULTA SITRAM**."
         )
 
         st.markdown(
@@ -325,7 +357,7 @@ with col_direita:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-# --- 5. SEÇÃO DE FEEDBACK (FORMSPREE) ---
+# 5. SEÇÃO DE FEEDBACK
 st.markdown("<br>", unsafe_allow_html=True)
 
 st.markdown('<div class="latam-card">', unsafe_allow_html=True)
