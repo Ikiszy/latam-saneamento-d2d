@@ -275,9 +275,9 @@ with col_esquerda:
                         )
             else:
                 df_upload = (
-                    pd.read_csv(arquivo)
+                    pd.read_csv(arquivo, dtype=str)
                     if arquivo.name.endswith(".csv")
-                    else pd.read_excel(arquivo)
+                    else pd.read_excel(arquivo, dtype=str)
                 )
                 if df_upload.shape[1] >= 2:
                     for _, row in df_upload.iterrows():
@@ -304,11 +304,11 @@ with col_esquerda:
 with col_direita:
     st.subheader("2. Painel de Acompanhamento")
 
-    # Verifica se já existe um relatório salvo no cache de execuções anteriores ou interrompidas
+    # Lê o cache forçando tipo texto (dtype=str) para evitar erro de OverflowError no PyArrow
     df_cache = None
     if os.path.exists(CACHE_FILE):
         try:
-            df_cache = pd.read_csv(CACHE_FILE, sep=";", encoding="utf-8-sig")
+            df_cache = pd.read_csv(CACHE_FILE, sep=";", encoding="utf-8-sig", dtype=str)
         except Exception:
             pass
 
@@ -330,15 +330,15 @@ with col_direita:
                 )
 
                 item_com_awb = {
-                    "AWB / Minuta": item.get("awb", "N/A"),
-                    "Chave / Ação Fiscal": item["acao_fiscal"],
-                    "Nota Fiscal": item["nota"],
-                    "Situação Imposto": item["imposto"],
-                    "Status Final": item["situacao"],
+                    "AWB / Minuta": str(item.get("awb", "N/A")),
+                    "Chave / Ação Fiscal": str(item["acao_fiscal"]),
+                    "Nota Fiscal": str(item["nota"]),
+                    "Situação Imposto": str(item["imposto"]),
+                    "Status Final": str(item["situacao"]),
                 }
 
                 resultados_em_tempo_real.append(item_com_awb)
-                df_temp = pd.DataFrame(resultados_em_tempo_real)
+                df_temp = pd.DataFrame(resultados_em_tempo_real).astype(str)
                 tabela_placeholder.dataframe(
                     df_temp, use_container_width=True
                 )
@@ -352,10 +352,10 @@ with col_direita:
             tocar_som_notificacao()
             st.success("🔔 Consulta finalizada com sucesso!")
 
-            # Carrega o resultado final salvo em disco
+            # Carrega resultado final tratando colunas como string
             if os.path.exists(CACHE_FILE):
                 df_final = pd.read_csv(
-                    CACHE_FILE, sep=";", encoding="utf-8-sig"
+                    CACHE_FILE, sep=";", encoding="utf-8-sig", dtype=str
                 )
                 st.dataframe(df_final, use_container_width=True)
                 csv_data = df_final.to_csv(
@@ -369,9 +369,9 @@ with col_direita:
                 )
 
     elif df_cache is not None and not df_cache.empty:
-        # SE A CONSULTA PAROU / CAIU, MOSTRA O QUE JÁ FOI CONSULTADO E O BOTÃO DE DOWNLOAD
+        # Recuperação automática de itens já processados em caso de interrupção/erro
         st.warning(
-            f"⚠️ **Atenção:** Uma consulta foi interrompida ou concluída anteriormente. Foram recuperados **{len(df_cache)}** registros!"
+            f"⚠️ **Atenção:** Consulta anterior foi interrompida ou concluída. Foram recuperados **{len(df_cache)}** registros!"
         )
         st.dataframe(df_cache, use_container_width=True)
 
