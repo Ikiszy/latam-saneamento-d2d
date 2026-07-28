@@ -1,9 +1,14 @@
 import base64
+import io
+import math
 import os
+import struct
+import wave
 import pandas as pd
 import requests
 import streamlit as st
-from sitram import consultar_chaves_sitram
+import streamlit.components.v1 as components
+from sitram import CACHE_FILE, consultar_chaves_sitram
 
 # 1. Configuração da página Streamlit
 st.set_page_config(
@@ -13,7 +18,43 @@ st.set_page_config(
 )
 
 
-# Função auxiliar para converter imagem local para Base64 (para HTML/CSS)
+# Função para tocar o som de conclusão
+def tocar_som_notificacao():
+    sample_rate = 44100
+    audio_data = []
+
+    for i in range(int(sample_rate * 0.15)):
+        t = float(i) / sample_rate
+        envelope = math.exp(-3 * t / 0.15)
+        value = int(
+            32767 * 0.3 * envelope * math.sin(2 * math.pi * 659.25 * t)
+        )
+        audio_data.append(value)
+
+    for i in range(int(sample_rate * 0.45)):
+        t = float(i) / sample_rate
+        envelope = math.exp(-4 * t / 0.45)
+        value = int(32767 * 0.4 * envelope * math.sin(2 * math.pi * 880.0 * t))
+        audio_data.append(value)
+
+    wav_io = io.BytesIO()
+    with wave.open(wav_io, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        for sample in audio_data:
+            wav_file.writeframes(struct.pack("<h", sample))
+
+    b64_str = base64.b64encode(wav_io.getvalue()).decode("utf-8")
+
+    sound_html = f"""
+        <audio autoplay style="display:none;">
+            <source src="data:audio/wav;base64,{b64_str}" type="audio/wav">
+        </audio>
+    """
+    components.html(sound_html, height=0, width=0)
+
+
 def get_image_base64(path: str) -> str:
     if os.path.exists(path):
         with open(path, "rb") as image_file:
@@ -23,17 +64,15 @@ def get_image_base64(path: str) -> str:
 
 logo_b64 = get_image_base64("latam_logo.png")
 
-# 2. Estilização CSS Personalizada (Tema Escuro / LATAM)
+# 2. Estilização CSS Personalizada
 st.markdown(
     """
     <style>
-        /* Fundo Geral - Azul Marinho LATAM */
         .stApp {
             background-color: #0D192B !important;
             color: #FFFFFF !important;
         }
 
-        /* Banner Principal no Topo */
         .latam-banner {
             background: linear-gradient(135deg, #1B0034 0%, #2A0052 100%);
             padding: 35px 20px;
@@ -64,7 +103,6 @@ st.markdown(
             margin: 0 !important;
         }
 
-        /* Títulos e Tipografia */
         .stMarkdown h2, .stMarkdown h3 {
             color: #FFFFFF !important;
             font-size: 22px !important;
@@ -77,7 +115,6 @@ st.markdown(
             font-weight: 600 !important;
         }
 
-        /* Campos de Entrada (Inputs e Textarea) */
         .stTextArea textarea, .stTextInput input {
             background-color: #162235 !important;
             color: #FFFFFF !important;
@@ -97,7 +134,6 @@ st.markdown(
             box-shadow: 0 0 0 1px #E2001A !important;
         }
 
-        /* Botão Vermelho LATAM */
         div.stButton > button {
             background-color: #E2001A !important;
             color: #FFFFFF !important;
@@ -115,7 +151,6 @@ st.markdown(
             background-color: #C10016 !important;
         }
 
-        /* Cards Informativos */
         .latam-card {
             background-color: #162235;
             border: 1px solid #23354E;
@@ -144,7 +179,6 @@ st.markdown(
             margin-top: 10px;
         }
 
-        /* Avisos e Alertas */
         .stAlert {
             background-color: #162235 !important;
             color: #FFFFFF !important;
@@ -156,7 +190,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 3. Cabeçalho / Banner Principal
+# 3. Cabeçalho / Banner
 logo_html = f'<img src="data:image/png;base64,{logo_b64}"><br>' if logo_b64 else ""
 
 st.markdown(
@@ -170,7 +204,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 4. Layout Principal em 2 Colunas
+# 4. Entrada de dados
 col_esquerda, col_direita = st.columns(2, gap="large")
 
 with col_esquerda:
@@ -182,7 +216,7 @@ with col_esquerda:
         horizontal=True,
     )
 
-    dados_para_consulta = []  # Estrutura: [{'awb': '...', 'chave': '...'}, ...]
+    dados_para_consulta = []
 
     if modo == "Digitar / Colar Dados":
         texto_chaves = st.text_area(
@@ -196,7 +230,6 @@ with col_esquerda:
                 if not linha_limpa:
                     continue
 
-                # Separa por tabulação, pipe ou múltiplos espaços
                 partes = [
                     p.strip()
                     for p in linha_limpa.replace("\t", " ")
@@ -247,7 +280,6 @@ with col_esquerda:
                     else pd.read_excel(arquivo)
                 )
                 if df_upload.shape[1] >= 2:
-                    # Assume Coluna 1 = AWB, Coluna 2 = Chave
                     for _, row in df_upload.iterrows():
                         dados_para_consulta.append(
                             {
@@ -256,7 +288,6 @@ with col_esquerda:
                             }
                         )
                 else:
-                    # Apenas 1 coluna -> considera como Chave
                     for _, row in df_upload.iterrows():
                         dados_para_consulta.append(
                             {
@@ -273,12 +304,18 @@ with col_esquerda:
 with col_direita:
     st.subheader("2. Painel de Acompanhamento")
 
+    # Verifica se já existe um relatório salvo no cache de execuções anteriores ou interrompidas
+    df_cache = None
+    if os.path.exists(CACHE_FILE):
+        try:
+            df_cache = pd.read_csv(CACHE_FILE, sep=";", encoding="utf-8-sig")
+        except Exception:
+            pass
+
     if btn_iniciar:
         if not dados_para_consulta:
             st.warning("Insira ao menos uma chave de acesso para iniciar.")
         else:
-            chaves_somente = [item["chave"] for item in dados_para_consulta]
-
             bar_progresso = st.progress(0)
             status_texto = st.empty()
             tabela_placeholder = st.empty()
@@ -292,15 +329,8 @@ with col_direita:
                     f"Processando: {atual} de {total} | Ação Fiscal: {item['acao_fiscal']}"
                 )
 
-                # Associa a AWB do item correspondente
-                awb_correspondente = (
-                    dados_para_consulta[atual - 1]["awb"]
-                    if atual <= len(dados_para_consulta)
-                    else "N/A"
-                )
-
                 item_com_awb = {
-                    "AWB / Minuta": awb_correspondente,
+                    "AWB / Minuta": item.get("awb", "N/A"),
                     "Chave / Ação Fiscal": item["acao_fiscal"],
                     "Nota Fiscal": item["nota"],
                     "Situação Imposto": item["imposto"],
@@ -308,7 +338,6 @@ with col_direita:
                 }
 
                 resultados_em_tempo_real.append(item_com_awb)
-
                 df_temp = pd.DataFrame(resultados_em_tempo_real)
                 tabela_placeholder.dataframe(
                     df_temp, use_container_width=True
@@ -316,30 +345,49 @@ with col_direita:
 
             with st.spinner("Consultando dados na SEFAZ..."):
                 consultar_chaves_sitram(
-                    chaves_somente, callback_progresso=atualizar_interface
+                    dados_para_consulta, callback_progresso=atualizar_interface
                 )
 
             status_texto.empty()
-            st.success("Consulta finalizada com sucesso!")
+            tocar_som_notificacao()
+            st.success("🔔 Consulta finalizada com sucesso!")
 
-            # Gerar CSV exportável para Google Sheets ou Excel
-            df_final = pd.DataFrame(resultados_em_tempo_real)
-            csv_data = df_final.to_csv(
-                index=False, sep=";", encoding="utf-8-sig"
-            )
+            # Carrega o resultado final salvo em disco
+            if os.path.exists(CACHE_FILE):
+                df_final = pd.read_csv(
+                    CACHE_FILE, sep=";", encoding="utf-8-sig"
+                )
+                st.dataframe(df_final, use_container_width=True)
+                csv_data = df_final.to_csv(
+                    index=False, sep=";", encoding="utf-8-sig"
+                )
+                st.download_button(
+                    label="📥 Baixar Planilha Final (.csv)",
+                    data=csv_data,
+                    file_name="Relatorio_Saneamento_LATAM.csv",
+                    mime="text/csv",
+                )
 
-            st.download_button(
-                label="📥 Baixar Planilha (.csv)",
-                data=csv_data,
-                file_name="Relatorio_Saneamento_LATAM.csv",
-                mime="text/csv",
-            )
+    elif df_cache is not None and not df_cache.empty:
+        # SE A CONSULTA PAROU / CAIU, MOSTRA O QUE JÁ FOI CONSULTADO E O BOTÃO DE DOWNLOAD
+        st.warning(
+            f"⚠️ **Atenção:** Uma consulta foi interrompida ou concluída anteriormente. Foram recuperados **{len(df_cache)}** registros!"
+        )
+        st.dataframe(df_cache, use_container_width=True)
+
+        csv_cache = df_cache.to_csv(index=False, sep=";", encoding="utf-8-sig")
+        st.download_button(
+            label=f"📥 Baixar Registros Consultados ({len(df_cache)} itens) (.csv)",
+            data=csv_cache,
+            file_name="Relatorio_Parcial_Saneamento_LATAM.csv",
+            mime="text/csv",
+        )
+
     else:
         st.info(
             "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
         )
 
-        # Card 1: Mensagem de Visão Corporativa
         st.markdown(
             """
             <div class="latam-card">
@@ -352,7 +400,6 @@ with col_direita:
             unsafe_allow_html=True,
         )
 
-        # Card 2: Dicas Operacionais
         st.markdown(
             """
             <div class="latam-card">
@@ -360,7 +407,7 @@ with col_direita:
                 <ul style="color: #CBD5E1; font-size: 14px; margin-bottom: 0; padding-left: 20px;">
                     <li>Você pode colar <b>AWB + Chave</b> juntas (copiando 2 colunas da sua planilha).</li>
                     <li>O relatório final sai com a AWB já vinculada a cada resultado!</li>
-                    <li>Ao finalizar, o arquivo <b>.CSV</b> gerado pode ser aberto direto no Google Sheets.</li>
+                    <li>Caso a consulta seja interrompida, <b>os itens já processados não serão perdidos</b>!</li>
                 </ul>
             </div>
             """,
@@ -374,7 +421,6 @@ st.write(
     "Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!"
 )
 
-# Substitua pelo ID gerado no Formspree (exemplo: "xpzwkoby")
 FORMSPREE_ID = "mrenybwd"
 FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
 
