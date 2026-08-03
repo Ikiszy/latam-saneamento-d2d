@@ -23,7 +23,6 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
     """
     resultados = []
 
-    # Se já existir um arquivo temporário de uma busca anterior, limpa ele
     if os.path.exists(CACHE_FILE):
         try:
             os.remove(CACHE_FILE)
@@ -37,18 +36,17 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
         page = browser.new_page()
 
         try:
-            # 1. Acessa a página principal do SITRAM
+            # Acessa o portal do SITRAM
             page.goto(
                 "https://portal-sitram.sefaz.ce.gov.br/sitram-internet/#/",
                 timeout=config.TIMEOUT,
             )
             page.wait_for_load_state("domcontentloaded", timeout=config.TIMEOUT)
 
-            # 2. Clica no menu lateral 'Consultas'
+            # Navegação no menu
             menu_consultas = page.get_by_text("Consultas", exact=True)
             menu_consultas.click()
 
-            # 3. Clica no link 'Nota Fiscal'
             opt_nota = page.get_by_role("link", name="Nota Fiscal").first
             opt_nota.click()
 
@@ -60,7 +58,6 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
         total_itens = len(lista_dados)
 
         for indice, item in enumerate(lista_dados, start=1):
-            # Extrai AWB e Chave do objeto
             if isinstance(item, dict):
                 awb_val = item.get("awb", "N/A").strip()
                 chave_val = item.get("chave", "").strip()
@@ -80,64 +77,48 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             }
 
             try:
-                # DIGITA APENAS A CHAVE DE ACESSO NO SITRAM
+                # Preenche a chave
                 campo = page.get_by_role("textbox")
                 campo.click()
-                page.keyboard.press("Control+A")
-                page.keyboard.press("Backspace")
+                campo.fill("")
                 campo.fill(chave_val)
 
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
 
-                # --- TRATATIVA PARA CARGA SOBRANTE / NOTA NÃO ENCONTRADA (POPUP DE AVISO) ---
-                btn_ok_modal = page.get_by_role("button", name="OK")
-                
-                # Tenta verificar em até 3 segundos se o popup de erro/informação apareceu
+                # --- 1. VERIFICAÇÃO DE MODAL / POPUP DE ERRO OU CARGA SOBRANTE ---
+                # Aguarda no máximo 2.5s para ver se o aviso modal aparece
+                sobrou_ou_erro = False
                 try:
-                    if btn_ok_modal.is_visible(timeout=3000):
-                        btn_ok_modal.click()  # Clica no OK para fechar a mensagem
-                        time.sleep(0.5)
+                    # Seletores comuns para o modal de erro/alerta do SITRAM
+                    btn_ok = page.locator("button:has-text('OK'), .btn-primary:has-text('OK')").first
+                    if btn_ok.is_visible(timeout=2500):
+                        btn_ok.click()
+                        sobrou_ou_erro = True
+                except Exception:
+                    pass
 
-                        resultado_item["nota"] = "N/A"
-                        resultado_item["imposto"] = "Nota Não Encontrada no SITRAM"
-                        resultado_item["situacao"] = "SOBRANTE / NÃO ENCONTRADA"
+                if sobrou_ou_erro:
+                    resultado_item["nota"] = "N/A"
+                    resultado_item["imposto"] = "Não Encontrado no SITRAM"
+                    resultado_item["situacao"] = "SOBRANTE / NÃO ENCONTRADA"
+                    resultados.append(resultado_item)
 
-                        resultados.append(resultado_item)
-
-                        # Salva e notifica o progresso para a interface
+                    # Atualiza o progresso sem forçar múltiplos refreshes no Streamlit
+                    if callback_progresso:
                         try:
-                            df_parcial = pd.DataFrame(resultados)
-                            df_parcial.columns = [
-                                "AWB",
-                                "Chave / Ação Fiscal",
-                                "Nota Fiscal",
-                                "Situação Imposto",
-                                "Status Final",
-                            ]
-                            df_parcial.to_csv(
-                                CACHE_FILE, index=False, sep=";", encoding="utf-8-sig"
-                            )
+                            callback_progresso(atual=indice, total=total_itens, item=resultado_item)
                         except Exception:
                             pass
+                    time.sleep(1.0)
+                    continue
 
-                        if callback_progresso:
-                            callback_progresso(
-                                atual=indice, total=total_itens, item=resultado_item
-                            )
-
-                        time.sleep(1.0)
-                        continue  # Vai direto para a próxima chave do loop
-                except Exception:
-                    pass  # Se o popup não apareceu, segue a leitura normal do resultado
-
-                # --- LEITURA NORMAL DOS DADOS DA TABELA ---
+                # --- 2. LEITURA NORMAL CASO A NOTA EXISTA ---
                 seletor_celula = "td:nth-child(4) > .st-cell-content"
-                page.wait_for_selector(seletor_celula, timeout=config.TIMEOUT)
+                page.wait_for_selector(seletor_celula, timeout=8000)
 
-                time.sleep(1.5)
+                time.sleep(1.0)
 
-                # .first evita o erro de strict mode quando o SITRAM retorna múltiplos elementos/linhas
                 status_texto = page.locator(seletor_celula).first.inner_text()
 
                 match_nota = re.search(
@@ -177,7 +158,6 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                     for termo in ["A PAGAR", "A RECOLHER", "PENDENTE"]
                 )
 
-                # Regras de liberação: PAGO, SEM COBRANÇA ou ISENTO
                 est_liberado = any(
                     termo in texto_completo
                     for termo in [
@@ -196,15 +176,24 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                     resultado_item["situacao"] = "PENDENTE"
 
             except PlaywrightTimeoutError:
+                # Tenta fechar algum modal pendente que possa ter travado
+                try:
+                    btn_ok_emergencia = page.locator("button:has-text('OK')").first
+                    if btn_ok_emergencia.is_visible(timeout=1000):
+                        btn_ok_emergencia.click()
+                except Exception:
+                    pass
+
                 resultado_item["imposto"] = "Timeout na busca"
                 resultado_item["situacao"] = "ERRO"
+
             except Exception as ex:
                 resultado_item["imposto"] = f"Erro: {str(ex)}"
                 resultado_item["situacao"] = "ERRO"
 
             resultados.append(resultado_item)
 
-            # SALVAMENTO EM TEMPO REAL
+            # Grava no cache local
             try:
                 df_parcial = pd.DataFrame(resultados)
                 df_parcial.columns = [
@@ -221,11 +210,14 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                 pass
 
             if callback_progresso:
-                callback_progresso(
-                    atual=indice, total=total_itens, item=resultado_item
-                )
+                try:
+                    callback_progresso(
+                        atual=indice, total=total_itens, item=resultado_item
+                    )
+                except Exception:
+                    pass
 
-            time.sleep(6.0)
+            time.sleep(2.0)
 
         browser.close()
 
