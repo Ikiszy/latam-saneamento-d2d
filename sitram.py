@@ -77,12 +77,18 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             }
 
             try:
-                # Limpa e digita a chave
+                # --- LIMPEZA E PREENCHIMENTO SEGURO DO CAMPO ---
                 campo = page.get_by_role("textbox")
                 campo.click()
+                time.sleep(0.3)
+                
+                # Seleciona tudo e apaga para garantir campo limpo
                 page.keyboard.press("Control+A")
                 page.keyboard.press("Backspace")
+                time.sleep(0.2)
+                
                 campo.fill(chave_val)
+                time.sleep(0.3)
 
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
@@ -97,16 +103,16 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                 except Exception:
                     pass
 
-                # --- PASSO 2: AGUARDAR TABELA COM TIMEOUT CURTO (3s) ---
+                # --- PASSO 2: AGUARDAR TABELA COM TIMEOUT ADEQUADO ---
                 seletor_celula = "td:nth-child(4) > .st-cell-content"
                 
                 try:
-                    page.wait_for_selector(seletor_celula, timeout=3500)
+                    page.wait_for_selector(seletor_celula, timeout=4000)
                     encontrou_tabela = True
                 except PlaywrightTimeoutError:
                     encontrou_tabela = False
 
-                # Se a tabela não apareceu, trata como Chave Não Encontrada / Sobrante e PULA para a próxima
+                # Se a tabela não apareceu (chave sobrante/não encontrada)
                 if not encontrou_tabela:
                     resultado_item["imposto"] = "Não Encontrada / Sobrante"
                     resultado_item["situacao"] = "SOBRANTE / NÃO ENCONTRADA"
@@ -125,7 +131,7 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                     if callback_progresso:
                         callback_progresso(atual=indice, total=total_itens, item=resultado_item)
 
-                    # Recarrega/reseta a consulta para garantir que o campo fique limpo
+                    time.sleep(1.0)
                     continue
 
                 # --- PASSO 3: LER DADOS CASO A TABELA TENHA SIDO ENCONTRADA ---
@@ -161,7 +167,7 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                     resultado_item["situacao"] = "PENDENTE"
 
             except Exception as ex:
-                resultado_item["imposto"] = f"Erro na busca"
+                resultado_item["imposto"] = "Erro na busca"
                 resultado_item["situacao"] = "ERRO"
 
             resultados.append(resultado_item)
@@ -179,7 +185,7 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             if callback_progresso:
                 callback_progresso(atual=indice, total=total_itens, item=resultado_item)
 
-            time.sleep(1.0)
+            time.sleep(1.5)
 
         browser.close()
 
