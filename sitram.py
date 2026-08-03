@@ -90,6 +90,48 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
 
+                # --- TRATATIVA PARA CARGA SOBRANTE / NOTA NÃO ENCONTRADA (POPUP DE AVISO) ---
+                btn_ok_modal = page.get_by_role("button", name="OK")
+                
+                # Tenta verificar em até 3 segundos se o popup de erro/informação apareceu
+                try:
+                    if btn_ok_modal.is_visible(timeout=3000):
+                        btn_ok_modal.click()  # Clica no OK para fechar a mensagem
+                        time.sleep(0.5)
+
+                        resultado_item["nota"] = "N/A"
+                        resultado_item["imposto"] = "Nota Não Encontrada no SITRAM"
+                        resultado_item["situacao"] = "SOBRANTE / NÃO ENCONTRADA"
+
+                        resultados.append(resultado_item)
+
+                        # Salva e notifica o progresso para a interface
+                        try:
+                            df_parcial = pd.DataFrame(resultados)
+                            df_parcial.columns = [
+                                "AWB",
+                                "Chave / Ação Fiscal",
+                                "Nota Fiscal",
+                                "Situação Imposto",
+                                "Status Final",
+                            ]
+                            df_parcial.to_csv(
+                                CACHE_FILE, index=False, sep=";", encoding="utf-8-sig"
+                            )
+                        except Exception:
+                            pass
+
+                        if callback_progresso:
+                            callback_progresso(
+                                atual=indice, total=total_itens, item=resultado_item
+                            )
+
+                        time.sleep(1.0)
+                        continue  # Vai direto para a próxima chave do loop
+                except Exception:
+                    pass  # Se o popup não apareceu, segue a leitura normal do resultado
+
+                # --- LEITURA NORMAL DOS DADOS DA TABELA ---
                 seletor_celula = "td:nth-child(4) > .st-cell-content"
                 page.wait_for_selector(seletor_celula, timeout=config.TIMEOUT)
 
