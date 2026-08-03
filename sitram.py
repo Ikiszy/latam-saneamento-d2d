@@ -16,6 +16,19 @@ except Exception as e:
     print(f"Aviso de instalação do Playwright: {e}")
 
 
+def resetar_pagina_consulta(page):
+    """Navega novamente para a tela de Nota Fiscal para resetar o formulário."""
+    try:
+        page.goto(
+            "https://portal-sitram.sefaz.ce.gov.br/sitram-internet/#/consultas/nota-fiscal",
+            timeout=config.TIMEOUT,
+        )
+        page.wait_for_selector("input, textarea", timeout=config.TIMEOUT)
+        time.sleep(1.0)
+    except Exception:
+        pass
+
+
 def consultar_chaves_sitram(lista_dados, callback_progresso=None):
     """
     Navega pelo menu do SITRAM e pesquisa as chaves informadas.
@@ -43,7 +56,7 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             )
             page.wait_for_load_state("domcontentloaded", timeout=config.TIMEOUT)
 
-            # 2. Navegação do menu
+            # 2. Navegação inicial no menu
             menu_consultas = page.get_by_text("Consultas", exact=True)
             menu_consultas.click()
 
@@ -77,48 +90,55 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             }
 
             try:
-                # --- LIMPEZA E PREENCHIMENTO SEGURO DO CAMPO ---
+                # Localiza o campo de busca
                 campo = page.get_by_role("textbox")
-                campo.click()
-                time.sleep(0.3)
                 
-                # Seleciona tudo e apaga para garantir campo limpo
+                # Se o campo não estiver visível (ex: tela travada), força o reset da página
+                if not campo.is_visible():
+                    resetar_pagina_consulta(page)
+                    campo = page.get_by_role("textbox")
+
+                campo.click()
+                time.sleep(0.2)
                 page.keyboard.press("Control+A")
                 page.keyboard.press("Backspace")
-                time.sleep(0.2)
-                
                 campo.fill(chave_val)
-                time.sleep(0.3)
+                time.sleep(0.2)
 
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
 
-                # --- PASSO 1: TRATAR MODAL / POPUP DE ALERTA ---
-                time.sleep(1.0)
+                # --- 1. VERIFICA SE DEU MODAL DE "NÃO ENCONTRADA" OU SOBRANTE ---
+                time.sleep(1.2)
+                modal_visivel = False
                 try:
                     btn_ok = page.locator("button:has-text('OK')").first
                     if btn_ok.is_visible(timeout=1500):
                         btn_ok.click()
+                        modal_visivel = True
                         time.sleep(0.5)
                 except Exception:
                     pass
 
-                # --- PASSO 2: AGUARDAR TABELA COM TIMEOUT ADEQUADO ---
+                # --- 2. VERIFICA SE A TABELA APARECEU ---
                 seletor_celula = "td:nth-child(4) > .st-cell-content"
-                
-                try:
-                    page.wait_for_selector(seletor_celula, timeout=4000)
-                    encontrou_tabela = True
-                except PlaywrightTimeoutError:
-                    encontrou_tabela = False
+                encontrou_tabela = False
 
-                # Se a tabela não apareceu (chave sobrante/não encontrada)
-                if not encontrou_tabela:
+                if not modal_visivel:
+                    try:
+                        page.wait_for_selector(seletor_celula, timeout=4000)
+                        encontrou_tabela = True
+                    except PlaywrightTimeoutError:
+                        encontrou_tabela = False
+
+                # SE NÃO ENCONTROU A TABELA OU DEU MODAL: TRATA COMO SOBRANTE E RESETA A PÁGINA
+                if modal_visivel or not encontrou_tabela:
+                    resultado_item["nota"] = "N/A"
                     resultado_item["imposto"] = "Não Encontrada / Sobrante"
                     resultado_item["situacao"] = "SOBRANTE / NÃO ENCONTRADA"
                     resultados.append(resultado_item)
 
-                    # Salva progresso parcial
+                    # Salva no cache parcial
                     try:
                         df_parcial = pd.DataFrame(resultados)
                         df_parcial.columns = [
@@ -131,10 +151,11 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                     if callback_progresso:
                         callback_progresso(atual=indice, total=total_itens, item=resultado_item)
 
-                    time.sleep(1.0)
+                    # RESETA A PÁGINA PARA A PRÓXIMA CONSULTA NÃO FALHAR
+                    resetar_pagina_consulta(page)
                     continue
 
-                # --- PASSO 3: LER DADOS CASO A TABELA TENHA SIDO ENCONTRADA ---
+                # --- 3. SE ENCONTROU A TABELA, EXTRAI OS DADOS ---
                 status_texto = page.locator(seletor_celula).first.inner_text()
 
                 match_nota = re.search(r"Nota\s*fiscal:\s*(.*)", status_texto, re.IGNORECASE)
@@ -169,6 +190,8 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             except Exception as ex:
                 resultado_item["imposto"] = "Erro na busca"
                 resultado_item["situacao"] = "ERRO"
+                # Em caso de exceção não esperada, reseta a tela para tentar salvar a próxima
+                resetar_pagina_consulta(page)
 
             resultados.append(resultado_item)
 
@@ -185,7 +208,7 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             if callback_progresso:
                 callback_progresso(atual=indice, total=total_itens, item=resultado_item)
 
-            time.sleep(1.5)
+            time.sleep(1.0)
 
         browser.close()
 
