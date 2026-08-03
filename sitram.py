@@ -36,14 +36,14 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
         page = browser.new_page()
 
         try:
-            # Acessa o portal do SITRAM
+            # 1. Acessa a página principal
             page.goto(
                 "https://portal-sitram.sefaz.ce.gov.br/sitram-internet/#/",
                 timeout=config.TIMEOUT,
             )
             page.wait_for_load_state("domcontentloaded", timeout=config.TIMEOUT)
 
-            # Navegação no menu
+            # 2. Navegação do menu
             menu_consultas = page.get_by_text("Consultas", exact=True)
             menu_consultas.click()
 
@@ -71,103 +71,88 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             resultado_item = {
                 "awb": awb_val if awb_val else "N/A",
                 "acao_fiscal": chave_val,
-                "nota": "",
+                "nota": "N/A",
                 "imposto": "Não Encontrado",
-                "situacao": "PENDENTE",
+                "situacao": "SOBRANTE / NÃO ENCONTRADA",
             }
 
             try:
-                # Preenche a chave
+                # Limpa e digita a chave
                 campo = page.get_by_role("textbox")
                 campo.click()
-                campo.fill("")
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Backspace")
                 campo.fill(chave_val)
 
                 btn_pesquisar = page.get_by_role("button", name="Pesquisar")
                 btn_pesquisar.click()
 
-                # --- 1. VERIFICAÇÃO DE MODAL / POPUP DE ERRO OU CARGA SOBRANTE ---
-                # Aguarda no máximo 2.5s para ver se o aviso modal aparece
-                sobrou_ou_erro = False
+                # --- PASSO 1: TRATAR MODAL / POPUP DE ALERTA ---
+                time.sleep(1.0)
                 try:
-                    # Seletores comuns para o modal de erro/alerta do SITRAM
-                    btn_ok = page.locator("button:has-text('OK'), .btn-primary:has-text('OK')").first
-                    if btn_ok.is_visible(timeout=2500):
+                    btn_ok = page.locator("button:has-text('OK')").first
+                    if btn_ok.is_visible(timeout=1500):
                         btn_ok.click()
-                        sobrou_ou_erro = True
+                        time.sleep(0.5)
                 except Exception:
                     pass
 
-                if sobrou_ou_erro:
-                    resultado_item["nota"] = "N/A"
-                    resultado_item["imposto"] = "Não Encontrado no SITRAM"
+                # --- PASSO 2: AGUARDAR TABELA COM TIMEOUT CURTO (3s) ---
+                seletor_celula = "td:nth-child(4) > .st-cell-content"
+                
+                try:
+                    page.wait_for_selector(seletor_celula, timeout=3500)
+                    encontrou_tabela = True
+                except PlaywrightTimeoutError:
+                    encontrou_tabela = False
+
+                # Se a tabela não apareceu, trata como Chave Não Encontrada / Sobrante e PULA para a próxima
+                if not encontrou_tabela:
+                    resultado_item["imposto"] = "Não Encontrada / Sobrante"
                     resultado_item["situacao"] = "SOBRANTE / NÃO ENCONTRADA"
                     resultados.append(resultado_item)
 
-                    # Atualiza o progresso sem forçar múltiplos refreshes no Streamlit
+                    # Salva progresso parcial
+                    try:
+                        df_parcial = pd.DataFrame(resultados)
+                        df_parcial.columns = [
+                            "AWB", "Chave / Ação Fiscal", "Nota Fiscal", "Situação Imposto", "Status Final"
+                        ]
+                        df_parcial.to_csv(CACHE_FILE, index=False, sep=";", encoding="utf-8-sig")
+                    except Exception:
+                        pass
+
                     if callback_progresso:
-                        try:
-                            callback_progresso(atual=indice, total=total_itens, item=resultado_item)
-                        except Exception:
-                            pass
-                    time.sleep(1.0)
+                        callback_progresso(atual=indice, total=total_itens, item=resultado_item)
+
+                    # Recarrega/reseta a consulta para garantir que o campo fique limpo
                     continue
 
-                # --- 2. LEITURA NORMAL CASO A NOTA EXISTA ---
-                seletor_celula = "td:nth-child(4) > .st-cell-content"
-                page.wait_for_selector(seletor_celula, timeout=8000)
-
-                time.sleep(1.0)
-
+                # --- PASSO 3: LER DADOS CASO A TABELA TENHA SIDO ENCONTRADA ---
                 status_texto = page.locator(seletor_celula).first.inner_text()
 
-                match_nota = re.search(
-                    r"Nota\s*fiscal:\s*(.*)", status_texto, re.IGNORECASE
-                )
-                match_imposto = re.search(
-                    r"Imposto:\s*(.*)", status_texto, re.IGNORECASE
-                )
+                match_nota = re.search(r"Nota\s*fiscal:\s*(.*)", status_texto, re.IGNORECASE)
+                match_imposto = re.search(r"Imposto:\s*(.*)", status_texto, re.IGNORECASE)
 
                 if match_nota:
-                    nota_val = (
-                        match_nota.group(1)
-                        .split("Imposto:")[0]
-                        .split("\n")[0]
-                        .strip()
-                    )
+                    nota_val = match_nota.group(1).split("Imposto:")[0].split("\n")[0].strip()
                     resultado_item["nota"] = nota_val if nota_val else "N/A"
-                else:
-                    resultado_item["nota"] = "N/A"
 
                 if match_imposto:
                     imposto_val = match_imposto.group(1).split("\n")[0].strip()
-                    resultado_item["imposto"] = (
-                        imposto_val if imposto_val else "Não Informado"
-                    )
+                    resultado_item["imposto"] = imposto_val if imposto_val else "Não Informado"
                 else:
-                    linhas = [
-                        l.strip() for l in status_texto.split("\n") if l.strip()
-                    ]
-                    resultado_item["imposto"] = (
-                        " / ".join(linhas) if linhas else "Não Informado"
-                    )
+                    linhas = [l.strip() for l in status_texto.split("\n") if l.strip()]
+                    resultado_item["imposto"] = " / ".join(linhas) if linhas else "Não Informado"
 
                 texto_completo = status_texto.upper()
                 tem_cobranca_ativa = any(
-                    termo in texto_completo
-                    for termo in ["A PAGAR", "A RECOLHER", "PENDENTE"]
+                    termo in texto_completo for termo in ["A PAGAR", "A RECOLHER", "PENDENTE"]
                 )
 
                 est_liberado = any(
                     termo in texto_completo
-                    for termo in [
-                        "PAGO",
-                        "PAGA",
-                        "SEM COBRANCA",
-                        "SEM COBRANÇA",
-                        "ISENTO",
-                        "ISENTA",
-                    ]
+                    for termo in ["PAGO", "PAGA", "SEM COBRANCA", "SEM COBRANÇA", "ISENTO", "ISENTA"]
                 )
 
                 if est_liberado and not tem_cobranca_ativa:
@@ -175,49 +160,26 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
                 else:
                     resultado_item["situacao"] = "PENDENTE"
 
-            except PlaywrightTimeoutError:
-                # Tenta fechar algum modal pendente que possa ter travado
-                try:
-                    btn_ok_emergencia = page.locator("button:has-text('OK')").first
-                    if btn_ok_emergencia.is_visible(timeout=1000):
-                        btn_ok_emergencia.click()
-                except Exception:
-                    pass
-
-                resultado_item["imposto"] = "Timeout na busca"
-                resultado_item["situacao"] = "ERRO"
-
             except Exception as ex:
-                resultado_item["imposto"] = f"Erro: {str(ex)}"
+                resultado_item["imposto"] = f"Erro na busca"
                 resultado_item["situacao"] = "ERRO"
 
             resultados.append(resultado_item)
 
-            # Grava no cache local
+            # Grava no cache
             try:
                 df_parcial = pd.DataFrame(resultados)
                 df_parcial.columns = [
-                    "AWB",
-                    "Chave / Ação Fiscal",
-                    "Nota Fiscal",
-                    "Situação Imposto",
-                    "Status Final",
+                    "AWB", "Chave / Ação Fiscal", "Nota Fiscal", "Situação Imposto", "Status Final"
                 ]
-                df_parcial.to_csv(
-                    CACHE_FILE, index=False, sep=";", encoding="utf-8-sig"
-                )
+                df_parcial.to_csv(CACHE_FILE, index=False, sep=";", encoding="utf-8-sig")
             except Exception:
                 pass
 
             if callback_progresso:
-                try:
-                    callback_progresso(
-                        atual=indice, total=total_itens, item=resultado_item
-                    )
-                except Exception:
-                    pass
+                callback_progresso(atual=indice, total=total_itens, item=resultado_item)
 
-            time.sleep(2.0)
+            time.sleep(1.0)
 
         browser.close()
 
