@@ -4,3 +4,7 @@ openpyxl
 requests
 playwright
 Pillow
+fastapi
+uvicorn
+gspread
+pdfplumber
