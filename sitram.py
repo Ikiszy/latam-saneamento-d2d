@@ -9,9 +9,9 @@ from playwright.sync_api import sync_playwright
 
 CACHE_FILE = "resultados_cache.csv"
 
-# Garante que os navegadores do Playwright estejam instalados
+# Instala o Chromium e as dependências nativas do Linux automaticamente
 try:
-    subprocess.run(["playwright", "install", "chromium"], check=True)
+    subprocess.run(["playwright", "install", "chromium", "--with-deps"], check=True)
 except Exception as e:
     print(f"Aviso de instalação do Playwright: {e}")
 
@@ -56,8 +56,11 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             pass
 
     with sync_playwright() as p:
+        # Args adicionados para garantir estabilidade do Chromium em servidores na nuvem
         browser = p.chromium.launch(
-            headless=config.HEADLESS, slow_mo=config.SLOW_MO
+            headless=config.HEADLESS,
+            slow_mo=config.SLOW_MO,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
         )
         page = browser.new_page()
 
@@ -105,7 +108,7 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
             try:
                 # Localiza o campo de busca
                 campo = page.get_by_role("textbox").first
-                
+
                 # Se o campo não estiver pronto, recarrega a página
                 if not campo.is_visible():
                     recarregar_e_preparar(page)
