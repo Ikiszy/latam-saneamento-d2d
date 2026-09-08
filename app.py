@@ -1,460 +1,241 @@
-import base64
-import io
-import math
 import os
-import struct
-import wave
+import re
+import time
 import pandas as pd
-import requests
 import streamlit as st
-import streamlit.components.v1 as components
-from sitram import CACHE_FILE, consultar_chaves_sitram
+import gspread
+import pdfplumber
+from datetime import datetime
+from playwright.sync_api import sync_playwright
 
-# 1. Configuração da página Streamlit
+# Configuração da página Streamlit
 st.set_page_config(
-    page_title="LATAM Cargo | Saneamento D2D",
-    page_icon="✈️",
-    layout="wide",
+    page_title="Gestor SITRAM - Ação Fiscal & NF-e",
+    page_icon="📦",
+    layout="wide"
 )
 
-
-# Função para tocar o som de conclusão
-def tocar_som_notificacao():
-    sample_rate = 44100
-    audio_data = []
-
-    for i in range(int(sample_rate * 0.15)):
-        t = float(i) / sample_rate
-        envelope = math.exp(-3 * t / 0.15)
-        value = int(
-            32767 * 0.3 * envelope * math.sin(2 * math.pi * 659.25 * t)
-        )
-        audio_data.append(value)
-
-    for i in range(int(sample_rate * 0.45)):
-        t = float(i) / sample_rate
-        envelope = math.exp(-4 * t / 0.45)
-        value = int(32767 * 0.4 * envelope * math.sin(2 * math.pi * 880.0 * t))
-        audio_data.append(value)
-
-    wav_io = io.BytesIO()
-    with wave.open(wav_io, "wb") as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate)
-        for sample in audio_data:
-            wav_file.writeframes(struct.pack("<h", sample))
-
-    b64_str = base64.b64encode(wav_io.getvalue()).decode("utf-8")
-
-    sound_html = f"""
-        <audio autoplay style="display:none;">
-            <source src="data:audio/wav;base64,{b64_str}" type="audio/wav">
-        </audio>
+# ----------------------------------------------------------------------
+# 1. FUNÇÕES DO BANCO DE DADOS (GOOGLE SHEETS)
+# ----------------------------------------------------------------------
+@st.cache_resource
+def conectar_google_sheets():
     """
-    components.html(sound_html, height=0, width=0)
-
-
-def get_image_base64(path: str) -> str:
-    if os.path.exists(path):
-        with open(path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode()
-    return ""
-
-
-logo_b64 = get_image_base64("latam_logo.png")
-
-# 2. Estilização CSS Personalizada
-st.markdown(
+    Conecta no Google Sheets usando o arquivo de credenciais 'credentials.json'.
+    Certifique-se de que o arquivo 'credentials.json' está na pasta do projeto.
     """
-    <style>
-        .stApp {
-            background-color: #0D192B !important;
-            color: #FFFFFF !important;
-        }
+    try:
+        gc = gspread.service_account(filename="credentials.json")
+        # Nome da sua planilha no Google Drive
+        sh = gc.open("SITRAM_DATABASE")
+        return sh
+    except Exception as e:
+        st.error(f"Erro ao conectar com Google Sheets: {e}")
+        return None
 
-        .latam-banner {
-            background: linear-gradient(135deg, #1B0034 0%, #2A0052 100%);
-            padding: 35px 20px;
-            border-radius: 16px;
-            text-align: center;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-            margin-bottom: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
+def obter_ou_criar_aba(sh, nome_aba, cabecalho):
+    try:
+        aba = sh.worksheet(nome_aba)
+    except Exception:
+        aba = sh.add_worksheet(title=nome_aba, rows=1000, cols=10)
+        aba.append_row(cabecalho)
+    return aba
 
-        .latam-banner img {
-            max-width: 380px !important;
-            width: 100% !important;
-            height: auto;
-            margin-bottom: 15px;
-        }
-
-        .latam-banner h1 {
-            color: #FFFFFF !important;
-            font-size: 38px !important;
-            font-weight: 800 !important;
-            margin: 5px 0 !important;
-        }
-
-        .latam-banner p {
-            color: #D1D5DB !important;
-            font-size: 18px !important;
-            margin: 0 !important;
-        }
-
-        .stMarkdown h2, .stMarkdown h3 {
-            color: #FFFFFF !important;
-            font-size: 22px !important;
-            font-weight: 700 !important;
-        }
-
-        label, .stRadio label, .stTextArea label, .stFileUploader label, .stTextInput label, .stSelectbox label {
-            color: #FFFFFF !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
-        }
-
-        .stTextArea textarea, .stTextInput input {
-            background-color: #162235 !important;
-            color: #FFFFFF !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
-            border: 2px solid #334155 !important;
-            border-radius: 8px !important;
-        }
-
-        .stTextArea textarea {
-            font-family: monospace !important;
-        }
-
-        .stTextArea textarea:focus, .stTextInput input:focus {
-            border-color: #E2001A !important;
-            box-shadow: 0 0 0 1px #E2001A !important;
-        }
-
-        div.stButton > button {
-            background-color: #E2001A !important;
-            color: #FFFFFF !important;
-            font-weight: bold !important;
-            font-size: 18px !important;
-            height: 3.2em !important;
-            border-radius: 8px !important;
-            border: none !important;
-            width: 100% !important;
-            margin-top: 10px;
-            box-shadow: 0 4px 12px rgba(226, 0, 26, 0.3);
-        }
+# ----------------------------------------------------------------------
+# 2. FUNÇÃO DE EXTRAÇÃO DE DADOS DO PDF DA AÇÃO FISCAL
+# ----------------------------------------------------------------------
+def extrair_dados_pdf_af(caminho_pdf):
+    dados = {
+        "num_af": "N/A",
+        "situacao_af": "N/A",
+        "status_imposto": "N/A",
+        "liberado": "NÃO"
+    }
+    
+    with pdfplumber.open(caminho_pdf) as pdf:
+        texto = ""
+        for pagina in pdf.pages:
+            texto += (pagina.extract_text() or "") + "\n"
         
-        div.stButton > button:hover {
-            background-color: #C10016 !important;
-        }
+        texto_upper = texto.upper()
+        
+        # Extrai Número da Ação Fiscal
+        match_af = re.search(r"AÇÃO FISCAL DE TRÂNSITO\s*-\s*(\d+)", texto_upper)
+        if match_af:
+            dados["num_af"] = match_af.group(1)
+            
+        # Extrai Situação
+        match_sit = re.search(r"SITUAÇÃO:\s*(.*)", texto_upper)
+        if match_sit:
+            dados["situacao_af"] = match_sit.group(1).split("\n")[0].strip()
+            
+        # Determina Status e Liberação
+        if "PAGO" in texto_upper and "A PAGAR" not in texto_upper:
+            dados["status_imposto"] = "PAGO"
+            dados["liberado"] = "SIM"
+        elif "A PAGAR" in texto_upper:
+            dados["status_imposto"] = "A PAGAR"
+            dados["liberado"] = "NÃO"
+            
+        if "LIBERADA: SIM" in texto_upper or "LIBERADA\nSIM" in texto_upper:
+            dados["liberado"] = "SIM"
 
-        .latam-card {
-            background-color: #162235;
-            border: 1px solid #23354E;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
+    return dados
 
-        .latam-card-title {
-            color: #E2001A;
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
+# ----------------------------------------------------------------------
+# 3. AUTOMAÇÃO NO SITRAM (PLAYWRIGHT)
+# ----------------------------------------------------------------------
+def consultar_acao_fiscal_sitram(chave_mdfe, awb_numero):
+    """
+    Acessa o SITRAM, preenche PRIMEIRO a Chave do MDF-e,
+    aguarda a liberação dos campos, seleciona AWB e baixa o PDF.
+    """
+    awb_limpa = str(awb_numero).strip()
+    if not awb_limpa.startswith("957") and len(awb_limpa) == 8:
+        awb_limpa = f"957{awb_limpa}"
 
-        .latam-quote {
-            font-style: italic;
-            color: #CBD5E1;
-            font-size: 15px;
-            line-height: 1.5;
-            border-left: 3px solid #E2001A;
-            padding-left: 12px;
-            margin-top: 10px;
-        }
+    download_dir = os.path.join(os.getcwd(), "downloads")
+    os.makedirs(download_dir, exist_ok=True)
 
-        .stAlert {
-            background-color: #162235 !important;
-            color: #FFFFFF !important;
-            border: 1px solid #334155 !important;
-            border-radius: 8px !important;
-        }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
+    resultado = {
+        "chave_mdfe": chave_mdfe,
+        "awb": awb_limpa,
+        "num_af": "N/A",
+        "status_imposto": "Erro / Não Encontrado",
+        "liberado": "NÃO",
+        "caminho_pdf": None
+    }
 
-# 3. Cabeçalho / Banner
-logo_html = f'<img src="data:image/png;base64,{logo_b64}"><br>' if logo_b64 else ""
-
-st.markdown(
-    f"""
-    <div class="latam-banner">
-        {logo_html}
-        <h1>Assistente de Saneamento D2D</h1>
-        <p>Módulo de Automação de Consulta SITRAM / SEFAZ-CE — LATAM Cargo</p>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
-
-# 4. Entrada de dados
-col_esquerda, col_direita = st.columns(2, gap="large")
-
-with col_esquerda:
-    st.subheader("1. Entrada de Dados")
-
-    modo = st.radio(
-        "Como você deseja importar as chaves?",
-        ["Digitar / Colar Dados", "Carregar Arquivo (TXT / Excel)"],
-        horizontal=True,
-    )
-
-    dados_para_consulta = []
-
-    if modo == "Digitar / Colar Dados":
-        texto_chaves = st.text_area(
-            "Cole abaixo (apenas Chaves OU formato 'AWB Chave', um por linha):",
-            height=250,
-            placeholder="32405235  3525041733098000127550030000000001\n32475605  3525041733098000127550030000000002",
-        )
-        if texto_chaves:
-            for linha in texto_chaves.split("\n"):
-                linha_limpa = linha.strip()
-                if not linha_limpa:
-                    continue
-
-                partes = [
-                    p.strip()
-                    for p in linha_limpa.replace("\t", " ")
-                    .replace("|", " ")
-                    .split()
-                    if p.strip()
-                ]
-
-                if len(partes) >= 2:
-                    dados_para_consulta.append(
-                        {"awb": partes[0], "chave": partes[1]}
-                    )
-                elif len(partes) == 1:
-                    dados_para_consulta.append(
-                        {"awb": "N/A", "chave": partes[0]}
-                    )
-
-    else:
-        arquivo = st.file_uploader(
-            "Selecione um arquivo de texto (.txt) ou planilha (.xlsx / .csv):",
-            type=["txt", "xlsx", "csv"],
-        )
-        if arquivo:
-            if arquivo.name.endswith(".txt"):
-                linhas = [
-                    l.decode("utf-8").strip()
-                    for l in arquivo.readlines()
-                    if l.decode("utf-8").strip()
-                ]
-                for l in linhas:
-                    partes = [
-                        p.strip()
-                        for p in l.replace("\t", " ").replace("|", " ").split()
-                        if p.strip()
-                    ]
-                    if len(partes) >= 2:
-                        dados_para_consulta.append(
-                            {"awb": partes[0], "chave": partes[1]}
-                        )
-                    elif len(partes) == 1:
-                        dados_para_consulta.append(
-                            {"awb": "N/A", "chave": partes[0]}
-                        )
-            else:
-                df_upload = (
-                    pd.read_csv(arquivo, dtype=str)
-                    if arquivo.name.endswith(".csv")
-                    else pd.read_excel(arquivo, dtype=str)
-                )
-                if df_upload.shape[1] >= 2:
-                    for _, row in df_upload.iterrows():
-                        dados_para_consulta.append(
-                            {
-                                "awb": str(row.iloc[0]).strip(),
-                                "chave": str(row.iloc[1]).strip(),
-                            }
-                        )
-                else:
-                    for _, row in df_upload.iterrows():
-                        dados_para_consulta.append(
-                            {
-                                "awb": "N/A",
-                                "chave": str(row.iloc[0]).strip(),
-                            }
-                        )
-
-    st.write(
-        f"**Total de registros identificados:** `{len(dados_para_consulta)}`"
-    )
-    btn_iniciar = st.button("INICIAR CONSULTA SITRAM")
-
-with col_direita:
-    st.subheader("2. Painel de Acompanhamento")
-
-    # Lê o cache forçando tipo texto (dtype=str) para evitar erro de OverflowError no PyArrow
-    df_cache = None
-    if os.path.exists(CACHE_FILE):
-        try:
-            df_cache = pd.read_csv(CACHE_FILE, sep=";", encoding="utf-8-sig", dtype=str)
-        except Exception:
-            pass
-
-    if btn_iniciar:
-        if not dados_para_consulta:
-            st.warning("Insira ao menos uma chave de acesso para iniciar.")
-        else:
-            bar_progresso = st.progress(0)
-            status_texto = st.empty()
-            tabela_placeholder = st.empty()
-
-            resultados_em_tempo_real = []
-
-            def atualizar_interface(atual, total, item):
-                percent = int((atual / total) * 100)
-                bar_progresso.progress(percent)
-                status_texto.text(
-                    f"Processando: {atual} de {total} | Ação Fiscal: {item['acao_fiscal']}"
-                )
-
-                item_com_awb = {
-                    "AWB / Minuta": str(item.get("awb", "N/A")),
-                    "Chave / Ação Fiscal": str(item["acao_fiscal"]),
-                    "Nota Fiscal": str(item["nota"]),
-                    "Situação Imposto": str(item["imposto"]),
-                    "Status Final": str(item["situacao"]),
-                }
-
-                resultados_em_tempo_real.append(item_com_awb)
-                df_temp = pd.DataFrame(resultados_em_tempo_real).astype(str)
-                tabela_placeholder.dataframe(
-                    df_temp, use_container_width=True
-                )
-
-            with st.spinner("Consultando dados na SEFAZ..."):
-                consultar_chaves_sitram(
-                    dados_para_consulta, callback_progresso=atualizar_interface
-                )
-
-            status_texto.empty()
-            tocar_som_notificacao()
-            st.success("🔔 Consulta finalizada com sucesso!")
-
-            # Carrega resultado final tratando colunas como string
-            if os.path.exists(CACHE_FILE):
-                df_final = pd.read_csv(
-                    CACHE_FILE, sep=";", encoding="utf-8-sig", dtype=str
-                )
-                st.dataframe(df_final, use_container_width=True)
-                csv_data = df_final.to_csv(
-                    index=False, sep=";", encoding="utf-8-sig"
-                )
-                st.download_button(
-                    label="📥 Baixar Planilha Final (.csv)",
-                    data=csv_data,
-                    file_name="Relatorio_Saneamento_LATAM.csv",
-                    mime="text/csv",
-                )
-
-    elif df_cache is not None and not df_cache.empty:
-        # Recuperação automática de itens já processados em caso de interrupção/erro
-        st.warning(
-            f"⚠️ **Atenção:** Consulta anterior foi interrompida ou concluída. Foram recuperados **{len(df_cache)}** registros!"
-        )
-        st.dataframe(df_cache, use_container_width=True)
-
-        csv_cache = df_cache.to_csv(index=False, sep=";", encoding="utf-8-sig")
-        st.download_button(
-            label=f"📥 Baixar Registros Consultados ({len(df_cache)} itens) (.csv)",
-            data=csv_cache,
-            file_name="Relatorio_Parcial_Saneamento_LATAM.csv",
-            mime="text/csv",
-        )
-
-    else:
-        st.info(
-            "Aguardando início. Insira as chaves ao lado e clique em **INICIAR CONSULTA SITRAM**."
-        )
-
-        st.markdown(
-            """
-            <div class="latam-card">
-                <div class="latam-card-title">✈️ Nosso Propósito</div>
-                <div class="latam-quote">
-                    "Levar os sonhos ao seu destino com segurança, eficiência e agilidade — otimizando processos fiscais para impulsionar a operação LATAM Cargo."
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            """
-            <div class="latam-card">
-                <div class="latam-card-title">💡 Dicas de Processamento D2D</div>
-                <ul style="color: #CBD5E1; font-size: 14px; margin-bottom: 0; padding-left: 20px;">
-                    <li>Você pode colar <b>AWB + Chave</b> juntas (copiando 2 colunas da sua planilha).</li>
-                    <li>O relatório final sai com a AWB já vinculada a cada resultado!</li>
-                    <li>Caso a consulta seja interrompida, <b>os itens já processados não serão perdidos</b>!</li>
-                </ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-# --- 5. Central de Feedback (Formspree) ---
-st.markdown("<br><hr>", unsafe_allow_html=True)
-st.subheader("💬 Central de Erros, Dúvidas ou Sugestões")
-st.write(
-    "Viu algum erro nos resultados ou tem uma ideia para melhorar o sistema? Mande abaixo!"
-)
-
-FORMSPREE_ID = "mrenybwd"
-FORMSPREE_URL = f"https://formspree.io/f/mrenybwd"
-
-with st.form(key="form_feedback_formspree", clear_on_submit=True):
-    nome_usuario = st.text_input("Seu nome (opcional):", placeholder="Ex: João Silva")
-    tipo_mensagem = st.selectbox(
-        "O que você deseja reportar?",
-        ["Erro / Bug no resultado", "Sugestão de melhoria", "Outro"],
-    )
-    mensagem = st.text_area(
-        "Descreva o erro ou sugestão em detalhes:", placeholder="Escreva aqui..."
-    )
-
-    btn_enviar_feedback = st.form_submit_button("Enviar Feedback 🚀")
-
-if btn_enviar_feedback:
-    if not mensagem.strip():
-        st.warning("Por favor, digite uma mensagem antes de enviar.")
-    else:
-        dados_envio = {
-            "nome": nome_usuario or "Anônimo",
-            "tipo": tipo_mensagem,
-            "mensagem": mensagem,
-        }
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
 
         try:
-            resposta = requests.post(FORMSPREE_URL, data=dados_envio)
-            if resposta.status_code == 200:
-                st.success(
-                    "Obrigado! Seu feedback foi enviado direto para o desenvolvedor."
-                )
-            else:
-                st.error(
-                    "Não foi possível enviar o feedback. Verifique se configurou o ID do Formspree."
-                )
+            # 1. Acessa o SITRAM
+            page.goto("https://portal-sitram.sefaz.ce.gov.br/sitram-internet/#/", timeout=30000)
+            page.wait_for_load_state("domcontentloaded")
+
+            # 2. Navega para Ação Fiscal
+            page.get_by_text("Consultas", exact=True).click()
+            time.sleep(0.5)
+            page.get_by_role("link", name="Ação Fiscal").first.click()
+            
+            # 3. Garante opção PDF marcada
+            page.get_by_label("PDF").check()
+
+            # 4. PASSO CRUCIAL: Preenche PRIMEIRO a Chave do MDF-e
+            campo_mdfe = page.get_by_placeholder("Insira aqui uma chave de acesso (MDF-e)").or_(page.locator("input").first)
+            campo_mdfe.fill(chave_mdfe)
+            campo_mdfe.dispatch_event("change")
+            time.sleep(1) # Aguarda os campos secundários serem habilitados na tela
+
+            # 5. Preenche os campos secundários de AWB caso existam
+            if page.locator("mat-select, select").count() > 0:
+                page.locator("mat-select, select").first.click()
+                page.get_by_text("AWB", exact=True).click()
+                
+                campo_awb = page.get_by_placeholder("Insira aqui").or_(page.locator("input").nth(1))
+                campo_awb.fill(awb_limpa)
+
+            # 6. Pesquisa e faz o download do PDF
+            with page.expect_download(timeout=25000) as download_info:
+                page.get_by_role("button", name="Pesquisar").click()
+
+            download = download_info.value
+            pdf_path = os.path.join(download_dir, f"AF_{awb_limpa}.pdf")
+            download.save_as(pdf_path)
+
+            # 7. Lê os dados do PDF
+            dados_pdf = extrair_dados_pdf_af(pdf_path)
+            resultado.update(dados_pdf)
+            resultado["caminho_pdf"] = pdf_path
+
         except Exception as e:
-            st.error(f"Erro ao conectar com o servidor: {e}")
+            st.warning(f"Aviso durante consulta MDF-e {chave_mdfe}: {e}")
+
+        browser.close()
+
+    return resultado
+
+# ----------------------------------------------------------------------
+# 4. INTERFACE GRÁFICA (STREAMLIT)
+# ----------------------------------------------------------------------
+st.title("📦 Gestor SITRAM - Banco de Dados & Consultas")
+
+sh = conectar_google_sheets()
+
+if sh:
+    aba_af = obter_ou_criar_aba(
+        sh, "AÇÕES_FISCAIS", 
+        ["CHAVE_MDFE", "AWB", "NUM_AF", "STATUS_IMPOSTO", "LIBERADO", "DATA_ATUALIZACAO"]
+    )
+    aba_nf = obter_ou_criar_aba(
+        sh, "NOTAS_FISCAIS", 
+        ["CHAVE_NFE", "AWB", "STATUS_IMPOSTO", "LIBERADO", "DATA_ATUALIZACAO"]
+    )
+
+    tab1, tab2, tab3 = st.tabs(["🔍 Consulta Ação Fiscal (MDF-e + AWB)", "📄 Consulta Nota Fiscal (NF-e + AWB)", "📊 Banco de Dados"])
+
+    # ------------------------------------------------------------------
+    # TAB 1: CONSULTA POR AÇÃO FISCAL
+    # ------------------------------------------------------------------
+    with tab1:
+        st.subheader("Entrada por Ação Fiscal")
+        st.caption("A Chave do MDF-e é o parâmetro principal para desbloquear os campos no SITRAM.")
+
+        with st.form("form_af"):
+            col1, col2 = st.columns(2)
+            with col1:
+                chave_mdfe_in = st.text_input("Chave de Acesso (MDF-e) *", help="44 dígitos da Chave do MDF-e")
+            with col2:
+                awb_in = st.text_input("Número AWB *", help="Exemplo: 36568956")
+
+            btn_processar_af = st.form_submit_button("Consultar e Salvar no Banco")
+
+        if btn_processar_af:
+            if not chave_mdfe_in or not awb_in:
+                st.error("Preencha a Chave do MDF-e e a AWB!")
+            else:
+                # REGRAS DO BANCO DE DADOS: Checa se já está liberado
+                registros = aba_af.get_all_records()
+                existente = next((r for r in registros if str(r.get("CHAVE_MDFE")) == chave_mdfe_in.strip()), None)
+
+                if existente and str(existente.get("LIBERADO")).upper() == "SIM":
+                    st.success(f"✅ MDF-e/AWB já cadastrada e **LIBERADA** no Banco de Dados! (Ação Fiscal nº {existente.get('NUM_AF')})")
+                    st.json(existente)
+                else:
+                    st.info("🔄 Registro pendente ou novo. Iniciando consulta no SITRAM...")
+                    
+                    with st.spinner("Acessando SITRAM e baixando Ação Fiscal..."):
+                        res = consultar_acao_fiscal_sitram(chave_mdfe_in.strip(), awb_in.strip())
+
+                    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    # Atualiza ou Insere na Planilha
+                    if existente:
+                        # Encontra a linha no gspread
+                        cell = aba_af.find(chave_mdfe_in.strip())
+                        idx_linha = cell.row
+                        aba_af.update_cell(idx_linha, 3, res["num_af"])
+                        aba_af.update_cell(idx_linha, 4, res["status_imposto"])
+                        aba_af.update_cell(idx_linha, 5, res["liberado"])
+                        aba_af.update_cell(idx_linha, 6, agora)
+                    else:
+                        aba_af.append_row([
+                            res["chave_mdfe"], res["awb"], res["num_af"],
+                            res["status_imposto"], res["liberado"], agora
+                        ])
+
+                    st.success(f"Consulta finalizada! Status: **{res['status_imposto']}** | Liberado: **{res['liberado']}**")
+
+    # ------------------------------------------------------------------
+    # TAB 3: VISUALIZAR BANCO DE DADOS COMPLETO
+    # ------------------------------------------------------------------
+    with tab3:
+        st.subheader("Registros no Banco de Dados (Google Sheets)")
+        dados_af_df = pd.DataFrame(aba_af.get_all_records())
+        if not dados_af_df.empty:
+            st.dataframe(dados_af_df, use_container_width=True)
+        else:
+            st.info("Nenhum registro de Ação Fiscal no banco de dados.")
