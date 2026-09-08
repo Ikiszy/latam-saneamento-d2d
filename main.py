@@ -34,8 +34,10 @@ def extrair_dados_pdf_af(caminho_pdf):
         "num_af": "N/A",
         "situacao_af": "N/A",
         "status_imposto": "N/A",
+        "debito_ct": "N/A",
         "liberado": "NÃO"
     }
+    
     with pdfplumber.open(caminho_pdf) as pdf:
         texto = ""
         for pagina in pdf.pages:
@@ -43,28 +45,49 @@ def extrair_dados_pdf_af(caminho_pdf):
         
         texto_upper = texto.upper()
         
+        # 1. Extração do Número da Ação Fiscal
         match_af = re.search(r"AÇÃO FISCAL DE TRÂNSITO\s*-\s*(\d+)", texto_upper)
         if match_af:
             dados["num_af"] = match_af.group(1)
             
+        # 2. Extração da Situação Geral da AF
         match_sit = re.search(r"SITUAÇÃO:\s*(.*)", texto_upper)
         if match_sit:
             dados["situacao_af"] = match_sit.group(1).split("\n")[0].strip()
             
-        if "PAGO" in texto_upper and "A PAGAR" not in texto_upper:
-            dados["status_imposto"] = "PAGO"
-            dados["liberado"] = "SIM"
+        # 3. Identificação de Débito CT na tabela
+        if re.search(r"DÉBITO CT\s+SIM", texto_upper) or re.search(r"\bSIM\b.*\b(SEM COBRANÇA|PAGA)\b", texto_upper):
+            dados["debito_ct"] = "SIM"
+        elif re.search(r"DÉBITO CT\s+NÃO", texto_upper) or "NÃO" in texto_upper:
+            dados["debito_ct"] = "NÃO"
+
+        # 4. Captura do Status do Imposto
+        if "PAGA OU PARCELADA" in texto_upper or "PAGA" in texto_upper:
+            dados["status_imposto"] = "PAGA"
+        elif "SEM COBRANÇA" in texto_upper:
+            dados["status_imposto"] = "SEM COBRANÇA"
         elif "A PAGAR" in texto_upper:
             dados["status_imposto"] = "A PAGAR"
+
+        # 5. REGRAS DE NEGÓCIO PARA LIBERAÇÃO
+        # Regra 1: Débito CT = SIM bloqueia a carga (DIFAL Frete) independente do status
+        if dados["debito_ct"] == "SIM":
             dados["liberado"] = "NÃO"
+            dados["status_imposto"] += " (RETIDA - DÉBITO CT)"
             
-        if "LIBERADA: SIM" in texto_upper or "LIBERADA\nSIM" in texto_upper:
+        # Regra 2: Débito CT = NÃO + Status PAGA ou SEM COBRANÇA = Liberado
+        elif dados["debito_ct"] == "NÃO" and dados["status_imposto"] in ["PAGA", "SEM COBRANÇA"]:
             dados["liberado"] = "SIM"
+            
+        # Fallback de segurança com base na indicação visual direta do PDF
+        elif "LIBERADA\tSIM" in texto_upper or "LIBERADA SIM" in texto_upper:
+            if dados["debito_ct"] != "SIM":
+                dados["liberado"] = "SIM"
 
     return dados
 
 # ----------------------------------------------------------------------
-# ENDPOINT PRINCIPAL: DA CONSULTA DE AÇÃO FISCAL
+# ENDPOINT PRINCIPAL: CONSULTA DE AÇÃO FISCAL
 # ----------------------------------------------------------------------
 @app.post("/consultar-acao-fiscal")
 def api_consultar_acao_fiscal(req: RequisicaoAF):
@@ -74,7 +97,7 @@ def api_consultar_acao_fiscal(req: RequisicaoAF):
     if not chave_mdfe or not awb_in:
         raise HTTPException(status_code=400, detail="Chave MDF-e e AWB são obrigatórias.")
 
-    # 1. VERIFICAÇÃO NO BANCO DE DADOS (GOOGLE SHEETS)
+    # 1. VERIFICAÇÃO NO GOOGLE SHEETS (HISTÓRICO)
     sh = conectar_google_sheets()
     if sh:
         try:
@@ -82,7 +105,6 @@ def api_consultar_acao_fiscal(req: RequisicaoAF):
             registros = aba_af.get_all_records()
             existente = next((r for r in registros if str(r.get("CHAVE_MDFE")) == chave_mdfe), None)
 
-            # Se já está liberado no banco, retorna imediatamente sem rodar o Playwright
             if existente and str(existente.get("LIBERADO")).upper() == "SIM":
                 return {
                     "origem": "banco_de_dados",
@@ -96,7 +118,7 @@ def api_consultar_acao_fiscal(req: RequisicaoAF):
         except Exception as err_sheet:
             print(f"Erro ao verificar aba do Sheets: {err_sheet}")
 
-    # 2. EXECUÇÃO DO ROBÔ (PLAYWRIGHT)
+    # 2. EXECUÇÃO DO SCRAPING (PLAYWRIGHT)
     awb_limpa = awb_in if awb_in.startswith("957") else f"957{awb_in}"
     download_dir = os.path.join(os.getcwd(), "downloads")
     os.makedirs(download_dir, exist_ok=True)
@@ -125,7 +147,7 @@ def api_consultar_acao_fiscal(req: RequisicaoAF):
             page.get_by_role("link", name="Ação Fiscal").first.click()
             page.get_by_label("PDF").check()
 
-            # Preenche primeiro a Chave do MDF-e para desbloquear os campos secundários
+            # Preenchimento sequencial obrigatório
             campo_mdfe = page.get_by_placeholder("Insira aqui uma chave de acesso (MDF-e)").or_(page.locator("input").first)
             campo_mdfe.fill(chave_mdfe)
             campo_mdfe.dispatch_event("change")
@@ -149,11 +171,10 @@ def api_consultar_acao_fiscal(req: RequisicaoAF):
             resultado.update(dados_pdf)
             browser.close()
 
-            # Remove o PDF local após processamento
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
 
-            # 3. GRAVAÇÃO/ATUALIZAÇÃO NO GOOGLE SHEETS
+            # 3. ATUALIZAÇÃO NO GOOGLE SHEETS
             if sh:
                 agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 aba_af = sh.worksheet("AÇÕES_FISCAIS")
