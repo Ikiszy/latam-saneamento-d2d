@@ -1,6 +1,5 @@
 import os
 import re
-import subprocess
 import time
 import pandas as pd
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -13,14 +12,6 @@ except ImportError:
     config = None
 
 CACHE_FILE = "resultados_cache.csv"
-
-# Instala o Chromium e as dependências nativas do Linux automaticamente
-try:
-    subprocess.run(
-        ["playwright", "install", "chromium", "--with-deps"], check=True
-    )
-except Exception as e:
-    print(f"Aviso de instalação do Playwright: {e}")
 
 
 def recarregar_e_preparar(page):
@@ -59,8 +50,8 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
         except Exception:
             pass
 
-    headless_val = getattr(config, "HEADLESS", False)
-    slow_mo_val = getattr(config, "SLOW_MO", 150)
+    headless_val = getattr(config, "HEADLESS", True)
+    slow_mo_val = getattr(config, "SLOW_MO", 0)
     timeout_val = getattr(config, "TIMEOUT", 15000)
     url_val = getattr(
         config,
@@ -69,14 +60,16 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
     )
 
     with sync_playwright() as p:
-        # Args adicionados para garantir estabilidade do Chromium em servidores na nuvem
+        # Argumentos necessários para rodar Chromium dentro do container Linux do Streamlit
         browser = p.chromium.launch(
-            headless=headless_val,
+            headless=True,
             slow_mo=slow_mo_val,
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--single-process",
             ],
         )
         page = browser.new_page()
