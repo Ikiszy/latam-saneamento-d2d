@@ -50,7 +50,6 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
         except Exception:
             pass
 
-    headless_val = getattr(config, "HEADLESS", True)
     slow_mo_val = getattr(config, "SLOW_MO", 0)
     timeout_val = getattr(config, "TIMEOUT", 15000)
     url_val = getattr(
@@ -60,18 +59,28 @@ def consultar_chaves_sitram(lista_dados, callback_progresso=None):
     )
 
     with sync_playwright() as p:
-        # Argumentos necessários para rodar Chromium dentro do container Linux do Streamlit
-        browser = p.chromium.launch(
-            headless=True,
-            slow_mo=slow_mo_val,
-            args=[
+        # Detecta e utiliza o Chromium nativo do sistema operacional Linux (Streamlit Cloud)
+        system_chromium = "/usr/bin/chromium"
+        if not os.path.exists(system_chromium):
+            system_chromium = "/usr/bin/chromium-browser"
+
+        launch_kwargs = {
+            "headless": True,
+            "slow_mo": slow_mo_val,
+            "args": [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
                 "--single-process",
             ],
-        )
+        }
+
+        # Se o executável do Chromium do sistema existir (no container Linux), força a sua utilização
+        if os.path.exists(system_chromium):
+            launch_kwargs["executable_path"] = system_chromium
+
+        browser = p.chromium.launch(**launch_kwargs)
         page = browser.new_page()
 
         try:
